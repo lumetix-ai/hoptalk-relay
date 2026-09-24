@@ -1,0 +1,2 @@
+# Test-only dependencies; the scripts themselves need requirements.txt alone.
+pytest>=8,<9
