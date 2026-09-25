@@ -530,3 +530,106 @@ def test_check_firmware_handles_a_node_that_does_not_answer(run_async, capsys):
 
     assert run_async(scenario()) is None
     assert any_line(capsys.readouterr().err, "firmware version is unknown")
+
+
+# ── path discovery ───────────────────────────────────────────────────────
+@pytest.mark.parametrize(
+    "path_hex, hop_bytes, expected",
+    [
+        ("", 1, "no hops — a direct neighbour"),
+        ("1122", 1, "11 -> 22"),
+        ("11223344", 2, "1122 -> 3344"),
+    ],
+)
+def test_format_path(path_hex, hop_bytes, expected):
+    assert node_setup.format_path(path_hex, hop_bytes) == expected
+
+
+def test_discover_path_reports_both_directions(run_async, capsys):
+    async def scenario():
+        node, mc = await open_node(
+            contacts=[(ALICE_KEY, "Alice", b"")],
+            discovery_out=b"\x11\x22",
+            discovery_in=b"\x33",
+        )
+        ok = await node_setup.discover_path(mc, "Alice", timeout=5)
+        await mc.disconnect()
+        return node, ok
+
+    node, ok = run_async(scenario())
+    assert ok is True
+    assert len(node.commands(0x34)) == 1
+    err = capsys.readouterr().err
+    assert any_line(err, "us -> them : 2 hop(s)   11 -> 22")
+    assert any_line(err, "them -> us : 1 hop(s)   33")
+    assert any_line(err, "not routing this symmetrically")
+
+
+def test_discover_path_reports_a_symmetric_route_without_the_warning(run_async, capsys):
+    async def scenario():
+        node, mc = await open_node(
+            contacts=[(ALICE_KEY, "Alice")], discovery_out=b"\x11", discovery_in=b"\x33"
+        )
+        ok = await node_setup.discover_path(mc, "Alice", timeout=5)
+        await mc.disconnect()
+        return ok
+
+    assert run_async(scenario()) is True
+    err = capsys.readouterr().err
+    assert any_line(err, "no route, so it floods")
+    assert not any_line(err, "not routing this symmetrically")
+
+
+def test_discover_path_reports_silence(run_async, capsys):
+    """No answer means one of the two legs failed — that is the measurement."""
+
+    async def scenario():
+        node, mc = await open_node(
+            contacts=[(ALICE_KEY, "Alice")], discovery_mode="silent"
+        )
+        ok = await node_setup.discover_path(mc, "Alice", timeout=1.5)
+        await mc.disconnect()
+        return node, ok
+
+    node, ok = run_async(scenario())
+    assert ok is False
+    assert len(node.commands(0x34)) == 1
+    assert any_line(capsys.readouterr().err, "did not make it")
+
+
+def test_discover_path_needs_a_known_contact(run_async, capsys):
+    async def scenario():
+        node, mc = await open_node(contacts=[(ALICE_KEY, "Alice")])
+        ok = await node_setup.discover_path(mc, "Nobody", timeout=5)
+        await mc.disconnect()
+        return node, ok
+
+    node, ok = run_async(scenario())
+    assert ok is False
+    assert node.commands(0x34) == []
+    assert any_line(capsys.readouterr().err, "No contact matching 'Nobody'")
+
+
+@pytest.mark.parametrize("wanted", ["alice", "ali", "1122334455"])
+def test_find_contact_by_name_or_key_prefix(run_async, wanted):
+    async def scenario():
+        node, mc = await open_node(contacts=[(ALICE_KEY, "Alice"), (BOB_KEY, "Bob")])
+        found = await node_setup.find_contact(mc, wanted)
+        await mc.disconnect()
+        return found
+
+    found = run_async(scenario())
+    assert found is not None and found["adv_name"] == "Alice"
+
+
+def test_find_contact_rejects_an_ambiguous_name(run_async, capsys):
+    async def scenario():
+        node, mc = await open_node(
+            contacts=[(ALICE_KEY, "Pager one"), (BOB_KEY, "Pager two")]
+        )
+        found = await node_setup.find_contact(mc, "pager")
+        await mc.disconnect()
+        return found
+
+    assert run_async(scenario()) is None
+    assert any_line(capsys.readouterr().err, "matches several contacts")

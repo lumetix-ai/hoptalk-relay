@@ -24,6 +24,7 @@ from fake_node import (
     pending_contact_push,
 )
 
+ZERO_HOP = b""          # a stored route with no hops: the node sends direct
 EMPTY_SLOT = ("", bytes(16))
 TAKEN_SLOT = ("general", b"\x01" * 16)
 
@@ -138,7 +139,7 @@ def test_contact_added_after_start_is_resolved(run_async, capsys):
     async def scenario():
         node, mc = await open_node()
         async with listening(mc, reply_text=None):
-            node.contacts.append((PAGER_KEY, "Pager2"))
+            node.add_contact(PAGER_KEY, "Pager2")
             await deliver(node, [dm_frame(PAGER_KEY[:6], "first contact", 1758730102)])
         await mc.disconnect()
 
@@ -328,7 +329,7 @@ def test_channel_table_reads_configured_slots(run_async):
 # ── replying ─────────────────────────────────────────────────────────────
 def test_reply_is_sent_and_acked(run_async, capsys):
     async def scenario():
-        node, mc = await open_node(contacts=[(ALICE_KEY, "Alice")])
+        node, mc = await open_node(contacts=[(ALICE_KEY, "Alice", ZERO_HOP)])
         async with listening(mc):
             await deliver(node, [dm_frame(ALICE_KEY[:6], "ping", 1758730300)], settle=1.2)
         await mc.disconnect()
@@ -338,9 +339,12 @@ def test_reply_is_sent_and_acked(run_async, capsys):
     assert node.sent_texts == ["RECEIVED"]
     assert node.commands(0x02)[0][7:13] == ALICE_KEY[:6]
     assert any_line(capsys.readouterr().err, "-> Alice: RECEIVED (direct, acked)")
+    assert node.commands(0x0D) == []          # a working route is left alone
 
 
 def test_reply_without_an_ack_says_so(run_async, capsys):
+    """No stored route, so the send already floods and there is nothing to clear."""
+
     async def scenario():
         node, mc = await open_node(
             contacts=[(ALICE_KEY, "Alice")], send_msg_mode="silent"
@@ -352,7 +356,8 @@ def test_reply_without_an_ack_says_so(run_async, capsys):
 
     node = run_async(scenario())
     assert node.sent_texts == ["RECEIVED"]
-    assert any_line(capsys.readouterr().err, "no ack yet")
+    assert node.commands(0x0D) == []
+    assert any_line(capsys.readouterr().err, "(flood, no ack yet)")
 
 
 def test_reply_failure_is_reported(run_async, capsys):
@@ -443,3 +448,120 @@ def test_custom_reply_text(run_async):
         return node
 
     assert run_async(scenario()).sent_texts == ["ok"]
+
+
+# ── stale routes and repeated messages ───────────────────────────────────
+def test_unacked_reply_clears_the_route_and_floods_a_retry(run_async, capsys):
+    """The field failure: a route learned nearby swallows every reply."""
+
+    async def scenario():
+        node, mc = await open_node(
+            contacts=[(ALICE_KEY, "Alice", ZERO_HOP)], send_msg_mode="silent"
+        )
+        async with listening(mc):
+            await deliver(node, [dm_frame(ALICE_KEY[:6], "ping", 1758730400)], settle=6.0)
+        await mc.disconnect()
+        return node
+
+    node = run_async(scenario())
+    resets = node.commands(0x0D)
+    assert len(resets) == 1
+    assert resets[0][1:33] == ALICE_KEY          # cleared by full key
+    assert node.sent_texts == ["RECEIVED", "RECEIVED"]
+    err = capsys.readouterr().err
+    assert any_line(err, "cleared the stored path to Alice (no ack for the reply)")
+    assert any_line(err, "(direct, no ack yet)")   # first attempt
+    assert any_line(err, "(flood, no ack yet)")    # after the reset
+
+
+def test_flood_arrival_clears_the_route_before_replying(run_async, capsys):
+    """It reached us by flood, so our stored route back is suspect too."""
+
+    async def scenario():
+        node, mc = await open_node(contacts=[(ALICE_KEY, "Alice", ZERO_HOP)])
+        async with listening(mc):
+            await deliver(
+                node, [dm_frame(ALICE_KEY[:6], "ping", 1758730401, path_len=2)], settle=1.5
+            )
+        await mc.disconnect()
+        return node
+
+    node = run_async(scenario())
+    order = [c[0] for c in node.sent_commands if c[0] in (0x02, 0x0D)]
+    assert order == [0x0D, 0x02]                 # cleared first, then one reply
+    assert node.sent_texts == ["RECEIVED"]
+    err = capsys.readouterr().err
+    assert any_line(err, "it reached us by flood")
+    assert any_line(err, "(flood, acked)")
+
+
+def test_direct_arrival_keeps_a_working_route(run_async):
+    async def scenario():
+        node, mc = await open_node(contacts=[(ALICE_KEY, "Alice", ZERO_HOP)])
+        async with listening(mc):
+            await deliver(node, [dm_frame(ALICE_KEY[:6], "ping", 1758730402)], settle=1.5)
+        await mc.disconnect()
+        return node
+
+    node = run_async(scenario())
+    assert node.commands(0x0D) == []
+    assert node.sent_texts == ["RECEIVED"]
+
+
+def test_a_repeated_message_is_answered_once(run_async, capsys):
+    """Every attempt carries the same sender timestamp, so it is one message."""
+
+    async def scenario():
+        node, mc = await open_node(contacts=[(ALICE_KEY, "Alice")])
+        async with listening(mc):
+            await deliver(
+                node,
+                [
+                    dm_frame(ALICE_KEY[:6], "wow", 1758730500),
+                    dm_frame(ALICE_KEY[:6], "wow", 1758730500, path_len=1),
+                    dm_frame(ALICE_KEY[:6], "wow", 1758730500, path_len=3),
+                ],
+                settle=2.0,
+            )
+        await mc.disconnect()
+        return node
+
+    node = run_async(scenario())
+    assert node.sent_texts == ["RECEIVED"]
+    out = capsys.readouterr().out
+    assert out.count("Alice: wow") == 3          # every attempt is still shown
+    assert out.count("retry") == 2
+
+
+def test_a_new_message_from_the_same_sender_is_answered(run_async):
+    async def scenario():
+        node, mc = await open_node(contacts=[(ALICE_KEY, "Alice")])
+        async with listening(mc):
+            await deliver(
+                node,
+                [
+                    dm_frame(ALICE_KEY[:6], "wow", 1758730600),
+                    dm_frame(ALICE_KEY[:6], "wow again", 1758730601),
+                ],
+                settle=2.0,
+            )
+        await mc.disconnect()
+        return node
+
+    assert run_async(scenario()).sent_texts == ["RECEIVED", "RECEIVED"]
+
+
+def test_retry_memory_is_bounded(run_async):
+    async def scenario():
+        node, mc = await open_node(contacts=[(ALICE_KEY, "Alice")])
+        listener = listen_dm.DirectMessageListener(mc)
+        for i in range(listen_dm.RETRY_MEMORY + 50):
+            listener._is_retry(
+                {"pubkey_prefix": ALICE_KEY[:6].hex(), "sender_timestamp": i, "text": "x"}
+            )
+        await mc.disconnect()
+        return listener
+
+    listener = run_async(scenario())
+    assert len(listener._seen) == listen_dm.RETRY_MEMORY
+    assert len(listener._seen_order) == listen_dm.RETRY_MEMORY

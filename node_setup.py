@@ -10,6 +10,7 @@ off if any of it is on, and prints the node's own contact card.
     python node_setup.py --reset          # factory reset the node (asks first)
     python node_setup.py --setup          # first-run setup: name, radio, path hash, acks
     python node_setup.py --reboot         # reboot, reconnect, report what persisted
+    python node_setup.py --discover-path KoalaBean   # measure the route to a contact
 
 Two separate firmware settings decide whether an advert becomes a contact by
 itself (companion_radio/MyMesh.cpp):
@@ -70,6 +71,11 @@ DIRECT_MSG_ACKS = 2
 
 # How long to wait for the USB serial port to come back after a reboot.
 REBOOT_TIMEOUT = 30.0
+
+# How long to wait for a path discovery answer. The firmware would suggest about
+# five seconds for a flooded request; a distant contact behind repeaters can take
+# a lot longer, and a late answer is still an answer.
+DISCOVER_TIMEOUT = 30.0
 
 AUTO_ADD_OVERWRITE_OLDEST = 0x01
 AUTO_ADD_TYPE_BITS = {
@@ -407,6 +413,89 @@ async def setup_node(mc: MeshCore, args: argparse.Namespace) -> bool:
     return True
 
 
+def format_path(path_hex: str, hop_bytes: int) -> str:
+    """Render a path as its per-hop hashes, in travel order."""
+    if not path_hex:
+        return "no hops — a direct neighbour"
+    width = max(hop_bytes, 1) * 2
+    hops = [path_hex[i : i + width] for i in range(0, len(path_hex), width)]
+    return " -> ".join(hops)
+
+
+async def find_contact(mc: MeshCore, wanted: str) -> Optional[dict[str, Any]]:
+    """Look a contact up by name or public-key prefix."""
+    stored = await fetch_contacts(mc)
+    if stored is None:
+        return None
+
+    want = wanted.strip().lower()
+    for contact in stored.values():
+        if (contact.get("adv_name") or "").lower() == want:
+            return contact
+
+    partial = [
+        c
+        for c in stored.values()
+        if want in (c.get("adv_name") or "").lower()
+        or c.get("public_key", "").lower().startswith(want)
+    ]
+    if len(partial) == 1:
+        return partial[0]
+    if partial:
+        status("That matches several contacts: " + ", ".join(
+            c.get("adv_name") or "<unnamed>" for c in partial
+        ))
+    else:
+        known = ", ".join(c.get("adv_name") or "<unnamed>" for c in stored.values())
+        status(f"No contact matching {wanted!r}. Stored: {known or 'none'}")
+    return None
+
+
+async def discover_path(mc: MeshCore, wanted: str, timeout: float) -> bool:
+    """Ask the mesh for the route to a contact and report both directions.
+
+    The firmware forces this request to flood (it clears out_path for the send,
+    CMD_SEND_PATH_DISCOVERY_REQ in MyMesh.cpp), so an answer proves that our
+    packets reach that node *and* that its reply finds its way back. Silence
+    means one of the two legs failed, without saying which.
+
+    It only measures: the firmware reports the paths to us and deliberately does
+    not store them ("DON'T send reciprocal path!"), so this changes no routing.
+    """
+    contact = await find_contact(mc, wanted)
+    if contact is None:
+        return False
+
+    name = contact.get("adv_name") or "<unnamed>"
+    key = contact.get("public_key", "")
+    stored = contact.get("out_path_len", -1)
+    status(f"Path discovery to {name} ({key[:12]}), up to {timeout:.0f}s:")
+    status(
+        "  the node currently stores: "
+        + ("no route, so it floods" if stored < 0 else f"a {stored}-hop route")
+    )
+
+    res = await mc.commands.send_path_discovery_sync(contact, timeout=timeout)
+    if res is None:
+        status(f"  no answer within {timeout:.0f}s — one of the two legs did not make it.")
+        status("  Which one is still open: retry from closer and compare.")
+        return False
+
+    payload = res.payload
+    out_hops, in_hops = payload["out_path_len"], payload["in_path_len"]
+    status(
+        f"  us -> them : {out_hops} hop(s)   "
+        f"{format_path(payload['out_path'], payload['out_path_hash_len'])}"
+    )
+    status(
+        f"  them -> us : {in_hops} hop(s)   "
+        f"{format_path(payload['in_path'], payload['in_path_hash_len'])}"
+    )
+    if out_hops != in_hops:
+        status("  The directions differ, so the mesh is not routing this symmetrically.")
+    return True
+
+
 async def wait_for_port(port: str, timeout: float = REBOOT_TIMEOUT) -> Optional[str]:
     """Wait for the node's serial port to come back after a reboot."""
     loop = asyncio.get_running_loop()
@@ -547,6 +636,10 @@ async def run(args: argparse.Namespace) -> int:
         for c in (stored or {}).values():
             status(f"  {c.get('adv_name') or '<unnamed>'} ({c.get('public_key', '')[:12]})")
 
+        if args.discover_path:
+            # Diagnostic only, and it writes nothing, so it runs on its own.
+            return 0 if await discover_path(mc, args.discover_path, args.discover_timeout) else 1
+
         if args.reset:
             # Nothing else is worth doing: the reset erases whatever we would
             # have configured, and the node reboots straight after.
@@ -628,6 +721,19 @@ def main() -> int:
         help="default path hash size in bytes for --setup (skips that prompt)",
     )
     parser.add_argument(
+        "--discover-path",
+        metavar="CONTACT",
+        help="measure the route to a contact (by name or public-key prefix) and "
+        "report both directions; changes nothing",
+    )
+    parser.add_argument(
+        "--discover-timeout",
+        type=float,
+        default=DISCOVER_TIMEOUT,
+        metavar="SECONDS",
+        help="how long to wait for the discovery answer (default: %(default)s)",
+    )
+    parser.add_argument(
         "--reboot",
         action="store_true",
         help="reboot the node afterwards, reconnect, and report what persisted",
@@ -669,6 +775,9 @@ def main() -> int:
         return 2
     if args.reset and args.reboot:
         status("--reset reboots the node by itself.")
+        return 2
+    if args.discover_path and (args.reset or args.setup or args.wipe_contacts):
+        status("--discover-path only measures; run it on its own.")
         return 2
 
     try:

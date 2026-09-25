@@ -36,6 +36,7 @@ PUSH_ADVERT = 0x80
 PUSH_ACK = 0x82
 PUSH_MSG_WAITING = 0x83
 PUSH_NEW_ADVERT = 0x8A
+PUSH_PATH_DISCOVERY = 0x8D
 
 ERR_NOT_FOUND = 2
 ERR_ILLEGAL_ARG = 6
@@ -51,9 +52,13 @@ ACK_CODE = bytes.fromhex("deadbeef")
 
 
 # ── frame builders ───────────────────────────────────────────────────────
-def contact_frame(pubkey: bytes, name: str, code: int = RESP_CONTACT) -> bytearray:
+def contact_frame(
+    pubkey: bytes, name: str, code: int = RESP_CONTACT, path: Optional[bytes] = None
+) -> bytearray:
+    """A contact record. path=None means no stored route, b"" means zero hops."""
+    plen = 255 if path is None else len(path)
     f = bytearray([code])
-    f += pubkey + bytes([1, 0, 255]) + bytes(64)
+    f += pubkey + bytes([1, 0, plen]) + (path or b"").ljust(64, b"\0")
     f += name.encode().ljust(32, b"\0")[:32]
     f += (0).to_bytes(4, "little") + (0).to_bytes(4, "little", signed=True) * 2
     f += (1).to_bytes(4, "little")
@@ -97,6 +102,17 @@ def channel_info_frame(idx: int, name: str, secret: bytes) -> bytearray:
     )
 
 
+def path_discovery_frame(
+    pubkey: bytes, out_hops: bytes, in_hops: bytes, hash_mode: int = 0
+) -> bytearray:
+    """The answer to a path discovery: the route out, then the route back."""
+    hop = hash_mode + 1
+    f = bytearray([PUSH_PATH_DISCOVERY, 0]) + pubkey[:6]
+    f += bytes([(len(out_hops) // hop) | (hash_mode << 6)]) + out_hops
+    f += bytes([(len(in_hops) // hop) | (hash_mode << 6)]) + in_hops
+    return f
+
+
 def advert_push(pubkey: bytes) -> bytearray:
     return bytearray([PUSH_ADVERT]) + pubkey
 
@@ -130,6 +146,9 @@ class FakeNode:
         channels: Optional[dict[int, tuple[str, bytes]]] = None,
         send_msg_mode: str = "ack",
         reset_mode: str = "ok",
+        discovery_mode: str = "ok",
+        discovery_out: bytes = b"\x11\x22",
+        discovery_in: bytes = b"\x33",
         reply_delay: float = 0.01,
     ) -> None:
         self.name = name
@@ -143,10 +162,16 @@ class FakeNode:
         self.protocol = protocol
         self.firmware = firmware
         self.answers_device_query = answers_device_query
-        self.contacts: list[tuple[bytes, str]] = list(contacts or [])
+        # (key, name) or (key, name, stored path); path None means flood-only.
+        self.contacts: list[tuple] = [
+            (entry + (None,))[:3] if len(entry) < 3 else entry for entry in (contacts or [])
+        ]
         self.channels = dict(channels or {})
         self.send_msg_mode = send_msg_mode
         self.reset_mode = reset_mode
+        self.discovery_mode = discovery_mode
+        self.discovery_out = discovery_out
+        self.discovery_in = discovery_in
         self.reply_delay = reply_delay
 
         self.pending: list[bytearray] = []      # messages queued on the node
@@ -173,9 +198,9 @@ class FakeNode:
         """Deliver a frame to the script, as an unsolicited push would arrive."""
         await self.reader.handle_rx(bytearray(frame))
 
-    async def reply(self, frames: list) -> None:
+    async def reply(self, frames: list, delay: Optional[float] = None) -> None:
         async def _later() -> None:
-            await asyncio.sleep(self.reply_delay)
+            await asyncio.sleep(self.reply_delay if delay is None else delay)
             for frame in frames:
                 await self.push(frame)
 
@@ -211,9 +236,23 @@ class FakeNode:
             f += bytes([self.path_hash_mode])
         return f
 
+    def contact_path(self, key_or_prefix: bytes) -> Optional[bytes]:
+        for key, _name, path in self.contacts:
+            if key.startswith(key_or_prefix) or key_or_prefix.startswith(key):
+                return path
+        return None
+
+    def add_contact(self, key: bytes, name: str, path: Optional[bytes] = None) -> None:
+        self.contacts = [c for c in self.contacts if c[0] != key] + [(key, name, path)]
+
+    def set_contact_path(self, key: bytes, path: Optional[bytes]) -> None:
+        self.contacts = [
+            (k, n, path if k == key else p) for k, n, p in self.contacts
+        ]
+
     def contact_frames(self) -> list[bytearray]:
         frames = [bytearray([RESP_CONTACTS_START]) + len(self.contacts).to_bytes(4, "little")]
-        frames += [contact_frame(key, name) for key, name in self.contacts]
+        frames += [contact_frame(key, name, path=path) for key, name, path in self.contacts]
         frames.append(bytearray([RESP_END_OF_CONTACTS]) + (1).to_bytes(4, "little"))
         return frames
 
@@ -230,7 +269,14 @@ class FakeNode:
             if self.send_msg_mode == "error":
                 await self.reply([bytearray([RESP_ERR, ERR_NOT_FOUND])])
             else:
-                frames = [bytearray([RESP_SENT, 0]) + ACK_CODE + (500).to_bytes(4, "little")]
+                # The firmware routes along a stored path when it has one, and
+                # floods otherwise; type 1 in MSG_SENT means it flooded.
+                routed_flood = self.contact_path(data[7:13]) is None
+                frames = [
+                    bytearray([RESP_SENT, 1 if routed_flood else 0])
+                    + ACK_CODE
+                    + (500).to_bytes(4, "little")
+                ]
                 if self.send_msg_mode == "ack":
                     frames.append(bytearray([PUSH_ACK]) + ACK_CODE)
                 await self.reply(frames)
@@ -242,13 +288,27 @@ class FakeNode:
         elif cmd == 0x09:                                # ADD_UPDATE_CONTACT
             key = data[1:33]
             name = data[100:132].rstrip(b"\0").decode("utf-8", "ignore")
-            self.contacts = [c for c in self.contacts if c[0] != key] + [(key, name)]
+            self.add_contact(key, name)
             await self.reply([bytearray([RESP_OK])])
         elif cmd == 0x0A:                                # SYNC_NEXT_MESSAGE
             if self.pending:
                 await self.reply([self.pending.pop(0)])
             else:
                 await self.reply([bytearray([RESP_NO_MORE_MESSAGES])])
+        elif cmd == 0x34:                                # SEND_PATH_DISCOVERY_REQ
+            if self.discovery_mode == "error":
+                await self.reply([bytearray([RESP_ERR, ERR_NOT_FOUND])])
+                return
+            await self.reply([bytearray([RESP_SENT, 1]) + ACK_CODE + (4400).to_bytes(4, "little")])
+            if self.discovery_mode == "ok":
+                # A real answer crosses the mesh and comes back seconds later.
+                await self.reply(
+                    [path_discovery_frame(data[2:34], self.discovery_out, self.discovery_in)],
+                    delay=0.3,
+                )
+        elif cmd == 0x0D:                                # RESET_PATH
+            self.set_contact_path(data[1:33], None)
+            await self.reply([bytearray([RESP_OK])])
         elif cmd == 0x0B:                                # SET_RADIO_PARAMS
             self.freq = int.from_bytes(data[1:5], "little") / 1000
             self.bw = int.from_bytes(data[5:9], "little") / 1000
@@ -262,7 +322,7 @@ class FakeNode:
             card = b"\x01" + b"\xcd" * 32 + self.name.encode()
             await self.reply([bytearray([RESP_EXPORT_CONTACT]) + card])
         elif cmd == 0x12:                                # IMPORT_CONTACT
-            self.contacts.append((CARD_KEY, "CardPager"))
+            self.add_contact(CARD_KEY, "CardPager")
             await self.reply([bytearray([RESP_OK])])
         elif cmd == 0x13:                                # REBOOT (never answers)
             pass

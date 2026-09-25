@@ -46,6 +46,10 @@ REPLYABLE_TXT_TYPES = (0, 2)
 
 DEFAULT_REPLY_TEXT = "RECEIVED"
 
+# How many (sender, timestamp, text) triples to remember, to recognise a sender
+# repeating itself instead of answering every attempt.
+RETRY_MEMORY = 200
+
 # The node pushes a "messages waiting" notification for every new message, so
 # this is only a safety net in case one is missed (e.g. during a reconnect).
 POLL_INTERVAL = 30.0
@@ -151,6 +155,8 @@ class DirectMessageListener:
         # idx -> channel name, for labelling channel messages; None = DM only
         self.channels = channels
         self.inbox: deque[dict[str, Any]] = deque()
+        self._seen: set[tuple] = set()             # messages already answered
+        self._seen_order: deque[tuple] = deque()   # same keys, oldest first
         # (public_key, pending contact dict or None if the node already knows it)
         self.adverts: deque[tuple[str, Optional[dict[str, Any]]]] = deque()
         self.wake = asyncio.Event()
@@ -267,9 +273,18 @@ class DirectMessageListener:
         # would otherwise keep each other busy forever.
         return msg.get("text", "").strip() != self.reply_text
 
-    async def _reply(self, msg: dict[str, Any], sender: str) -> None:
-        """Send the acknowledgement back to whoever sent this DM."""
-        prefix = msg["pubkey_prefix"]
+    async def _reset_path(self, contact: dict[str, Any], sender: str, why: str) -> bool:
+        """Clear the node's stored route to a contact, so the next send floods."""
+        res = await self.mc.commands.reset_path(contact)
+        if res is None or res.type == EventType.ERROR:
+            detail = res.payload if res else "no reply from the node"
+            status(f"! could not clear the path to {sender}: {detail}")
+            return False
+        status(f"~ cleared the stored path to {sender} ({why}); the next send floods")
+        return True
+
+    async def _send_reply(self, target: Any, sender: str) -> tuple[bool, bool, str]:
+        """Send the acknowledgement once. Returns (sent, acked, route)."""
         loop = asyncio.get_running_loop()
         acked: asyncio.Future = loop.create_future()
         seen: set[str] = set()
@@ -284,30 +299,58 @@ class DirectMessageListener:
         # Subscribe before sending: the ack can be queued right behind MSG_SENT.
         sub = self.mc.subscribe(EventType.ACK, on_ack)
         try:
-            res = await self.mc.commands.send_msg(prefix, self.reply_text)
+            res = await self.mc.commands.send_msg(target, self.reply_text)
             if res is None or res.type == EventType.ERROR:
                 detail = res.payload if res else "no reply from the node"
                 status(f"! reply to {sender} not sent: {detail}")
-                return
+                return False, False, ""
 
             expected = res.payload.get("expected_ack", b"").hex()
             route = "flood" if res.payload.get("type") == 1 else "direct"
             # The node suggests how long its own attempt may take, in ms.
             timeout = (res.payload.get("suggested_timeout") or 0) / 1000 * 1.2
-            if expected in seen:
-                status(f"-> {sender}: {self.reply_text} ({route}, acked)")
-                return
-            try:
-                await asyncio.wait_for(acked, timeout=max(timeout, 2.0))
-            except asyncio.TimeoutError:
-                status(f"-> {sender}: {self.reply_text} ({route}, no ack yet)")
-            else:
-                status(f"-> {sender}: {self.reply_text} ({route}, acked)")
+            if expected not in seen:
+                try:
+                    await asyncio.wait_for(acked, timeout=max(timeout, 2.0))
+                except asyncio.TimeoutError:
+                    status(f"-> {sender}: {self.reply_text} ({route}, no ack yet)")
+                    return True, False, route
+            status(f"-> {sender}: {self.reply_text} ({route}, acked)")
+            return True, True, route
         finally:
             self.mc.unsubscribe(sub)
 
-    async def _resolve_name(self, key: str) -> Optional[str]:
-        """Contact name for a public key (or prefix), re-syncing once if needed."""
+    async def _reply(
+        self, msg: dict[str, Any], contact: Optional[dict[str, Any]], sender: str
+    ) -> None:
+        """Acknowledge a DM, clearing a stale route when the reply goes unheard.
+
+        The firmware sends along a contact's stored out_path whenever it has one
+        and never falls back to flood by itself, and its own acks go the same way
+        (BaseChatMesh::sendMessage, sendAckTo). A path learned while the other
+        node was nearby therefore keeps swallowing both until it is cleared, and
+        nothing refreshes it: the node only learns a new path when the other side
+        returns one, which it only does after receiving something by flood.
+        """
+        target: Any = contact or msg["pubkey_prefix"]
+        has_path = bool(contact) and contact.get("out_path_len", -1) >= 0
+
+        # It reached us by flood, so the sender had no working path here. Ours
+        # back to them was learned earlier and is just as likely dead.
+        if has_path and msg.get("path_len") != 255:
+            if await self._reset_path(contact, sender, "it reached us by flood"):
+                has_path = False
+
+        sent, acked, route = await self._send_reply(target, sender)
+        if not sent or acked:
+            return
+
+        if has_path and route != "flood":
+            if await self._reset_path(contact, sender, "no ack for the reply"):
+                await self._send_reply(contact, sender)
+
+    async def _resolve_contact(self, key: str) -> Optional[dict[str, Any]]:
+        """The contact for a public key (or prefix), re-syncing once if needed."""
         if not key:
             return None
         contact = self.mc.get_contact_by_key_prefix(key)
@@ -316,7 +359,29 @@ class DirectMessageListener:
             self._refreshed = True
             await fetch_contacts(self.mc)
             contact = self.mc.get_contact_by_key_prefix(key)
+        return contact
+
+    async def _resolve_name(self, key: str) -> Optional[str]:
+        contact = await self._resolve_contact(key)
         return contact.get("adv_name") if contact else None
+
+    def _is_retry(self, msg: dict[str, Any]) -> bool:
+        """True when the sender is repeating a message we have already handled.
+
+        Every attempt carries the sender's original timestamp — the attempt
+        number is what makes the packet unique — so this triple identifies one
+        message however many times it arrives.
+        """
+        if msg.get("type") == "CHAN":
+            return False
+        key = (msg.get("pubkey_prefix"), msg.get("sender_timestamp"), msg.get("text"))
+        if key in self._seen:
+            return True
+        self._seen.add(key)
+        self._seen_order.append(key)
+        while len(self._seen_order) > RETRY_MEMORY:
+            self._seen.discard(self._seen_order.popleft())
+        return False
 
     async def _should_add(self, pending: dict[str, Any], name: str, key: str) -> bool:
         """Decide whether a node that just advertised belongs in the contacts."""
@@ -391,6 +456,7 @@ class DirectMessageListener:
     async def _print_inbox(self) -> None:
         while self.inbox:
             msg = self.inbox.popleft()
+            contact = None
             if msg.get("type") == "CHAN":
                 idx = msg.get("channel_idx")
                 # A channel message carries no sender key - whatever name it
@@ -398,18 +464,24 @@ class DirectMessageListener:
                 sender = f"#{(self.channels or {}).get(idx) or idx}"
             else:
                 prefix = msg.get("pubkey_prefix", "")
-                name = await self._resolve_name(prefix)
-                sender = name or f"<{prefix or 'unknown'}>"
+                contact = await self._resolve_contact(prefix)
+                sender = (contact or {}).get("adv_name") or f"<{prefix or 'unknown'}>"
 
+            retry = self._is_retry(msg)
             text = msg.get("text", "")
             route = route_info(msg)
+            if retry:
+                route = f"{route}, retry" if route else "retry"
             suffix = f"   ({route})" if route else ""
             print(f"[{datetime.now():%H:%M:%S}] {sender}: {text}{suffix}", flush=True)
             if self.show_raw:
                 print(f"           raw: {msg}", flush=True)
 
-            if self._should_reply(msg):
-                await self._reply(msg, sender)
+            # One reply per message, not per attempt: the sender repeating itself
+            # means our answers are not getting through, so more of them into the
+            # same dead route would only add airtime.
+            if not retry and self._should_reply(msg):
+                await self._reply(msg, contact, sender)
 
 
 async def channel_table(mc: MeshCore) -> dict[int, dict[str, Any]]:

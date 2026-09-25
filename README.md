@@ -76,6 +76,42 @@ answered:
 That echo guard covers the symmetric case only. Two relays with *different* reply
 texts would still ping-pong, so do not point two of these at each other.
 
+### Stale routes
+
+The firmware sends a DM along the contact's stored `out_path` whenever it has
+one, and never falls back to flood by itself — and its own acks go the same way
+(`BaseChatMesh::sendMessage`, `sendAckTo`). A route learned while the other node
+was nearby therefore keeps swallowing every reply once it moves out of range, and
+nothing refreshes it: the node only learns a new route when the other side
+returns one, which it only does after receiving something by flood. The stale
+route prevents exactly the traffic that would fix it.
+
+So the script clears the route itself, in two places:
+
+* a message that arrived **by flood** means the sender had no working route here,
+  so the stored route back to them is cleared before replying;
+* a reply that goes **unacked over a stored route** clears it and floods one
+  retry.
+
+Clearing it (`RESET_PATH`, the "Reset path" button in the clients) also unsticks
+the firmware's own acks, because they read the same field. The log shows what
+happened:
+
+```
+[15:14:33] KoalaBean: wow   (flood, 2 hops, SNR 1.75, sent 15:14:32)
+~ cleared the stored path to KoalaBean (it reached us by flood); the next send floods
+-> KoalaBean: RECEIVED (flood, acked)
+```
+
+### Repeated messages
+
+Every attempt of one message carries the sender's original timestamp — the
+attempt number is what makes each packet unique — so sender, timestamp and text
+together identify one message however many times it arrives. Retries are printed
+and marked `retry`, but answered only once: a sender repeating itself means the
+replies are not getting through, and more of them down the same route would only
+add airtime.
+
 Other flags: `--raw` also dumps each message's parsed payload, `--debug` turns on
 the `meshcore` protocol log.
 
@@ -162,7 +198,31 @@ a slot that is already in use.
 .venv/bin/python node_setup.py --wipe-contacts  # delete every stored contact
 .venv/bin/python node_setup.py --reset          # factory reset the node
 .venv/bin/python node_setup.py --setup          # first-run setup after a reset
+.venv/bin/python node_setup.py --discover-path KoalaBean   # measure a route
 ```
+
+### --discover-path
+
+Measures the route to one contact and reports both directions:
+
+```
+Path discovery to Platypuff (fed2902733ba), up to 25s:
+  the node currently stores: a 0-hop route
+  us -> them : 0 hop(s)   no hops — a direct neighbour
+  them -> us : 0 hop(s)   no hops — a direct neighbour
+```
+
+The firmware forces this request to flood — it clears `out_path` for the send
+(`CMD_SEND_PATH_DISCOVERY_REQ` in `MyMesh.cpp`) — so an answer proves that our
+packets reach that node **and** that its reply finds its way back. Silence means
+one of the two legs failed, without saying which; compare runs from different
+distances to narrow it down. Raise `--discover-timeout` for a distant contact:
+the firmware would suggest about five seconds, and an answer that takes twenty is
+still an answer.
+
+It only measures. The firmware reports the paths to the app and deliberately does
+not store them ("DON'T send reciprocal path!"), so this diagnoses routing without
+changing it.
 
 ### --setup
 
