@@ -55,9 +55,20 @@ async def start_pairing(relay_worker: RelayWorkerHarness, *, advert_flood: bool 
     return pairing_session_id
 
 
-async def wait_for_advert_count(firmware: FakeCompanionFirmware, expected_advert_count: int) -> None:
+async def wait_for_advert_count(
+    firmware: FakeCompanionFirmware, pairing_session_id: int, expected_advert_count: int
+) -> None:
+    """Wait until the node sent the advert and the worker recorded it.
+
+    The worker takes the time the next advert counts from after the node has sent this one, and
+    records the advert after that: a clock moved forward before then would push the next one away.
+    """
     await wait_until(
         lambda: count_adverts(firmware) == expected_advert_count, description=f"advert {expected_advert_count}"
+    )
+    await wait_for_database(
+        lambda: read_pairing_session(pairing_session_id).adverts_sent == expected_advert_count,
+        description=f"the worker to record advert {expected_advert_count}",
     )
 
 
@@ -73,11 +84,11 @@ async def test_adverts_go_out_at_the_interval_until_the_session_ends(
     await start_running_relay(relay_worker, fake_companion_firmware)
 
     pairing_session_id = await start_pairing(relay_worker)
-    await wait_until(lambda: count_adverts(fake_companion_firmware) == 1, description="the first advert")
+    await wait_for_advert_count(fake_companion_firmware, pairing_session_id, 1)
 
     for expected_advert_count in (2, 3):
         relay_worker.clock.advance(seconds=ADVERT_INTERVAL_SECONDS)
-        await wait_for_advert_count(fake_companion_firmware, expected_advert_count)
+        await wait_for_advert_count(fake_companion_firmware, pairing_session_id, expected_advert_count)
 
     relay_worker.clock.advance(seconds=PAIRING_DURATION_SECONDS)
     await wait_for_database(

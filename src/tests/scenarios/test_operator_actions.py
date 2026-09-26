@@ -72,9 +72,24 @@ def count_adverts(firmware: FakeCompanionFirmware) -> int:
     return sum(1 for packet in firmware.transmitted_packets if isinstance(packet, AdvertPacket))
 
 
-async def wait_for_advert_count(firmware: FakeCompanionFirmware, expected_advert_count: int) -> None:
+def read_adverts_sent(pairing_session_id: int) -> int:
+    return PairingSession.objects.get(id=pairing_session_id).adverts_sent
+
+
+async def wait_for_advert_count(
+    firmware: FakeCompanionFirmware, pairing_session_id: int, expected_advert_count: int
+) -> None:
+    """Wait until the node sent the advert and the worker recorded it.
+
+    The worker takes the time the next advert counts from after the node has sent this one, and
+    records the advert after that: a clock moved forward before then would push the next one away.
+    """
     await wait_until(
         lambda: count_adverts(firmware) == expected_advert_count, description=f"advert {expected_advert_count}"
+    )
+    await wait_for_database(
+        lambda: read_adverts_sent(pairing_session_id) == expected_advert_count,
+        description=f"the worker to record advert {expected_advert_count}",
     )
 
 
@@ -119,10 +134,10 @@ async def test_pairing_captures_a_new_device_the_operator_adds_and_which_then_si
     )
     pairing_session = await in_database(get_active_pairing_session)
     assert pairing_session is not None
-    await wait_for_advert_count(fake_companion_firmware, 1)
+    await wait_for_advert_count(fake_companion_firmware, pairing_session.pk, 1)
     for expected_advert_count in (2, 3):
         relay_worker.clock.advance(seconds=PAIRING_ADVERT_INTERVAL_SECONDS)
-        await wait_for_advert_count(fake_companion_firmware, expected_advert_count)
+        await wait_for_advert_count(fake_companion_firmware, pairing_session.pk, expected_advert_count)
     newcomer.send_advert()
     await wait_for_database(
         lambda: HeardAdvert.objects.filter(pairing_session_id=pairing_session.pk).exists(),

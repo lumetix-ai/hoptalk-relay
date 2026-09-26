@@ -162,6 +162,7 @@ class NodeLink:
         self._firmware_acknowledgements_seen = len(device.firmware_acknowledgements)
         self._path_updates_seen = len(device.path_update_times)
         self._last_hand_off_at: float | None = None
+        self._last_hand_off_finished_at: float | None = None
         self._last_route_reset_at: float | None = None
         self._route_reset_is_owed = False
         self._table_full_wait_ends_at: float | None = None
@@ -323,11 +324,26 @@ class NodeLink:
             return False
         if self._table_full_wait_ends_at is not None and now < self._table_full_wait_ends_at:
             return False
-        gap_seconds = self.timing.minimum_gap_between_direct_messages_seconds
-        if self._last_hand_off_at is not None and now - self._last_hand_off_at < gap_seconds:
+        if not self._minimum_gap_has_passed(now):
             return False
         awaiting_limit = self.timing.maximum_direct_messages_awaiting_acknowledgement
         return self.count_direct_messages_awaiting_acknowledgement() < awaiting_limit
+
+    def _minimum_gap_has_passed(self, now: float) -> bool:
+        """The gap must have passed since the last hand-off's pass, and on the clock since that hand-off ended.
+
+        A hand-off is recorded at the time of its pass, so counting from the pass keeps the recorded
+        hand-offs the gap apart even when a pass begins before the gap is over and checks after it.
+        The end of a hand-off comes after its MeshCore timestamp was taken: counted from the pass
+        alone, a stall before that timestamp would let the next one fall into the same second of a
+        scaled wall clock, and max(now, previous + 1) would run ahead of it.
+        """
+        if self._last_hand_off_at is None or self._last_hand_off_finished_at is None:
+            return True
+        seconds_since_the_last_hand_off_pass = now - self._last_hand_off_at
+        seconds_since_the_last_hand_off_ended = self.clock.monotonic_seconds() - self._last_hand_off_finished_at
+        gap_seconds = self.timing.minimum_gap_between_direct_messages_seconds
+        return min(seconds_since_the_last_hand_off_pass, seconds_since_the_last_hand_off_ended) >= gap_seconds
 
     def _take_next_needed_direct_message(self) -> QueuedDirectMessage | None:
         while self._queue:
@@ -403,6 +419,7 @@ class NodeLink:
             sent_direct_message
         )
         self._last_hand_off_at = now
+        self._last_hand_off_finished_at = self.clock.monotonic_seconds()
         self._table_full_wait_ends_at = None
 
     def allocate_meshcore_timestamp(self) -> int:

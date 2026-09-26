@@ -54,14 +54,18 @@ from tests.worker.fake_node.simulated_mesh import (
     SimulatedMesh,
     parse_received_direct_message,
 )
+from tests.worker.fake_node.waiting import wait_until
 from tests.worker.simulated_hoptalk_client import ClientNotSignedInError, SimulatedHopTalkClient
 from tests.worker.simulated_hoptalk_client_node_link import (
+    DirectMessagePriority,
+    NodeLink,
     RouteHygieneOutcome,
     RouteHygieneTrigger,
     SentDirectMessage,
 )
 from tests.worker.simulated_hoptalk_client_records import (
     FAILURE_REASON_ACCOUNT_SWITCHED,
+    ClientCounters,
     ClientEventKind,
     ConversationRefresh,
     OutgoingMessageStatus,
@@ -76,6 +80,9 @@ FAST_TIMING = ClientTiming().scaled_by(TEST_TIME_FACTOR)
 PASSWORD = "correct horse battery"
 OTHER_PASSWORD = "another horse battery"
 RELAY_POLL_INTERVAL_SECONDS = 0.002
+HELD_BACK_RECIPROCAL_PATH_DELAY_SECONDS = 3600.0
+# The same delay for every packet: texts sent back to back cannot overtake one another on the way.
+IN_ORDER_DELAY_SECONDS = 0.002
 INCOMING_MESSAGE_ID = 1790294400123456
 MESSAGE_TYPE_LETTER_POSITION = len(PROTOCOL_PREFIX)
 ZERO_WIDTH_JOINER_FAMILY = "\U0001f468‍\U0001f469‍\U0001f467‍\U0001f466"
@@ -383,10 +390,17 @@ async def test_a_retried_part_is_byte_identical_and_goes_out_after_the_retry_pau
     assert message.retry_rounds == 1
 
 
+# Long pauses on both sides: the whole round reaches the server long before its status is due, and that
+# status reaches the client long before a retry round would start, however slowly the machine runs.
+LONG_COALESCING_SECONDS = 0.5
+PATIENT_RETRY_TIMING = dataclasses.replace(
+    FAST_TIMING, retry_pauses_seconds=tuple(10 * pause for pause in FAST_TIMING.retry_pauses_seconds)
+)
+
+
 async def test_a_status_with_zeros_after_the_whole_round_brings_exactly_the_missing_parts_at_once(
-    client: SimulatedHopTalkClient, relay: ScriptedRelay
+    device: SimulatedDevice, relay: ScriptedRelay
 ) -> None:
-    await sign_in_as(client, "ivan")
     first_copy_of_part_two_is_lost = True
 
     def lose_the_first_copy_of_part_two(text: str) -> list[str]:
@@ -399,9 +413,11 @@ async def test_a_status_with_zeros_after_the_whole_round_brings_exactly_the_miss
         return relay.answer_like_a_server(text)
 
     relay.answer = lose_the_first_copy_of_part_two
-
-    message = client.send_message("Bob", "x" * 250)
-    await message.wait_for_status(OutgoingMessageStatus.SENT)
+    relay.coalescing_seconds = LONG_COALESCING_SECONDS
+    async with running_client(device, timing=PATIENT_RETRY_TIMING) as client:
+        await sign_in_as(client, "ivan")
+        message = client.send_message("Bob", "x" * 250)
+        await message.wait_for_status(OutgoingMessageStatus.SENT)
 
     assert part_numbers_sent(client) == [1, 2, 3, 2]
     assert relay.sent_texts[-2:] == [
@@ -959,19 +975,100 @@ async def test_a_reinstalled_app_sharing_the_scaled_clock_never_reuses_a_meshcor
         await sign_in_as(first_install, "ivan")
         sent_messages = [first_install.send_message("Bob", f"number {number}") for number in range(5)]
         await sent_messages[-1].wait_for_status(OutgoingMessageStatus.SENT)
+    second_in_which_the_first_install_stopped = int(scaled_clock.wall_clock_seconds())
+    # Deleting and installing an app again takes seconds, so the new install never sends within the
+    # second in which the old one stopped. Started at once, it would be only one round trip (about
+    # one scaled second) behind the old install's last direct message.
+    await wait_until(
+        lambda: int(scaled_clock.wall_clock_seconds()) > second_in_which_the_first_install_stopped,
+        description="the shared clock to leave the second in which the first install stopped",
+    )
     reinstalled_app = SimulatedHopTalkClient(device, timing=FAST_TIMING, clock=scaled_clock)
     async with reinstalled_app:
         await sign_in_as(reinstalled_app, "ivan")
 
     last_timestamp_of_first_install = first_install.sent_direct_messages[-1].meshcore_timestamp
+    assert last_timestamp_of_first_install <= second_in_which_the_first_install_stopped
     assert reinstalled_app.sent_direct_messages[0].meshcore_timestamp > last_timestamp_of_first_install
     assert first_install.internal_errors == reinstalled_app.internal_errors == []
 
 
+class SteppedScaledClock:
+    """A scaled clock whose time the test steps; the process can stall right before the next wall-clock read."""
+
+    def __init__(self) -> None:
+        self.scaled_seconds = 0.0
+        self.stall_before_next_wall_clock_read_scaled_seconds = 0.0
+
+    def monotonic_seconds(self) -> float:
+        return self.scaled_seconds * TEST_TIME_FACTOR
+
+    def wall_clock_seconds(self) -> float:
+        self.scaled_seconds += self.stall_before_next_wall_clock_read_scaled_seconds
+        self.stall_before_next_wall_clock_read_scaled_seconds = 0.0
+        return 1_790_294_400.0 + self.scaled_seconds
+
+
+async def test_a_stall_before_a_meshcore_timestamp_is_taken_never_lets_the_next_one_run_ahead_of_the_wall_clock(
+    device: SimulatedDevice,
+) -> None:
+    clock = SteppedScaledClock()
+    node_link = NodeLink(
+        device, storage=SimulatedClientStorage(), timing=FAST_TIMING, clock=clock, counters=ClientCounters()
+    )
+    for number in range(2):
+        node_link.queue_direct_message(f"HT1 Q user{number}", priority=DirectMessagePriority.REQUEST)
+    # The first pass starts at 0.5 s and stalls until 2.2 s before it takes its timestamp. A gap counted from
+    # the start of that pass would end at 2.5 s, still within the second of that timestamp.
+    clock.scaled_seconds = 0.5
+    clock.stall_before_next_wall_clock_read_scaled_seconds = 1.7
+
+    wall_clock_seconds_after_each_hand_off: list[int] = []
+    while len(node_link.sent_direct_messages) < 2:
+        sent_before_the_pass = len(node_link.sent_direct_messages)
+        node_link.hand_direct_messages_to_node(clock.monotonic_seconds())
+        if len(node_link.sent_direct_messages) > sent_before_the_pass:
+            wall_clock_seconds_after_each_hand_off.append(int(clock.wall_clock_seconds()))
+        clock.scaled_seconds = round(clock.scaled_seconds + 0.1, 1)
+
+    meshcore_timestamps = [sent.meshcore_timestamp for sent in node_link.sent_direct_messages]
+    assert all(
+        meshcore_timestamp <= wall_clock_second
+        for meshcore_timestamp, wall_clock_second in zip(
+            meshcore_timestamps, wall_clock_seconds_after_each_hand_off, strict=True
+        )
+    ), (meshcore_timestamps, wall_clock_seconds_after_each_hand_off)
+
+
+async def test_a_pass_that_began_before_the_minimum_gap_ended_hands_nothing_to_the_node(
+    device: SimulatedDevice,
+) -> None:
+    clock = SteppedScaledClock()
+    node_link = NodeLink(
+        device, storage=SimulatedClientStorage(), timing=FAST_TIMING, clock=clock, counters=ClientCounters()
+    )
+    for number in range(2):
+        node_link.queue_direct_message(f"HT1 Q user{number}", priority=DirectMessagePriority.REQUEST)
+    node_link.hand_direct_messages_to_node(clock.monotonic_seconds())
+    # The next pass begins at 1.9 s, within the two-second gap, and its work before the hand-off lasts until 2.1 s.
+    pass_began_at = 1.9 * TEST_TIME_FACTOR
+    clock.scaled_seconds = 2.1
+    node_link.hand_direct_messages_to_node(pass_began_at)
+    assert len(node_link.sent_direct_messages) == 1
+
+    node_link.hand_direct_messages_to_node(clock.monotonic_seconds())
+    first_hand_off, second_hand_off = node_link.sent_direct_messages
+    gap_seconds = FAST_TIMING.minimum_gap_between_direct_messages_seconds
+    assert second_hand_off.handed_to_node_at - first_hand_off.handed_to_node_at >= gap_seconds
+
+
 async def test_other_text_and_malformed_or_unknown_server_messages_are_never_acted_on(
-    client: SimulatedHopTalkClient, relay: ScriptedRelay
+    client: SimulatedHopTalkClient, device: SimulatedDevice, relay: ScriptedRelay
 ) -> None:
     await sign_in_as(client, "ivan")
+    device.downlink = LinkPolicy(
+        minimum_delay_seconds=IN_ORDER_DELAY_SECONDS, maximum_delay_seconds=IN_ORDER_DELAY_SECONDS
+    )
     received_before = len(client.received_direct_messages)
     sent_before = len(client.sent_direct_messages)
     ignored_texts = ["hello there", "HT1 k Bob 01 1", "HT1 z something newer", "HT2 m ivan 5 1/1 from the future"]
@@ -1098,6 +1195,12 @@ async def test_a_server_message_that_arrived_by_flood_resets_the_route_before_it
     no_path_update_window_timing = dataclasses.replace(FAST_TIMING, path_update_window_seconds=0.0)
     async with running_client(device, timing=no_path_update_window_timing) as client:
         await sign_in_as(client, "Bob")
+        # The relay's node answers the path the device returns for the flood with its own path to the device.
+        # Milliseconds later that is a new route, which a slow client may see in the same pass as the flood
+        # and rightly take as recent; held back, the device learns no route before it answers.
+        relay.relay_firmware.timing = dataclasses.replace(
+            relay.relay_firmware.timing, reciprocal_path_delay_seconds=HELD_BACK_RECIPROCAL_PATH_DELAY_SECONDS
+        )
 
         relay.send(format_delivery_part("ivan", INCOMING_MESSAGE_ID, 1, 1, "by flood"), by_flood=True)
         await wait_for_sent(client, ClientMessageType.DELIVERY_ACKNOWLEDGEMENT, 1)

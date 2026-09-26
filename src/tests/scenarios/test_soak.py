@@ -4,11 +4,22 @@ Every random choice (who sends what to whom, the part counts, the troubles and t
 from SOAK_SEED; the mesh draws its losses, duplicates and reorderings from the fake node's seed.
 
 Two hundred messages keep the relay's pacing busy for about an hour of production time, so the soak
-runs five times faster than the other scenarios: every duration a client can observe is the
-production one multiplied by SOAK_TIME_FACTOR, on the clients and on the server alike. The
-firmware-ACK floors are the exception: at this speed they would end before the fake mesh's round
-trip, so they stay near the other scenarios' values. Most messages are short, as in a chat; long
-ones up to ten parts are rarer.
+runs twice as fast as the other scenarios: every duration a client can observe is the production
+one multiplied by SOAK_TIME_FACTOR, on the clients and on the server alike. The firmware-ACK floors
+are the exception: at this speed they would end before the fake mesh's round trip, so they stay
+near the other scenarios' values. Most messages are short, as in a chat; long ones up to ten parts
+are rarer.
+
+The relay's own work is not scaled: every direct message costs it a few database transactions in
+real time. When a slow machine makes the relay answer later than a client's scaled retry pause,
+the client sends every unconfirmed part again; the copies fill the relay node's 256-frame queue,
+the relay works through them one by one, and acceptance slows to a crawl while the planned
+messages keep coming. That is why the soak is not faster: a smaller SOAK_TIME_FACTOR shortens the
+retry pauses further. It is also why the troubled stretch runs on a scenario clock that stands
+still while more than MAXIMUM_PARTS_IN_FLIGHT parts wait to be confirmed: it stops only while the
+relay is behind, so a slower machine gets the same messages and troubles in the same order, only
+later. And a convergence wait fails only once what is left has not shrunk for
+NO_PROGRESS_TIMEOUT_SECONDS: then the relay is stuck, not slow.
 """
 
 import asyncio
@@ -42,7 +53,7 @@ from tests.scenarios.scenario_setup import sign_in
 from tests.worker.fake_node.fake_companion_firmware import FakeCompanionFirmware
 from tests.worker.fake_node.simulated_mesh import LinkPolicy, SimulatedDevice, SimulatedMesh
 from tests.worker.fake_node.waiting import wait_until
-from tests.worker.relay_worker.worker_harness import RelayWorkerHarness, in_database, wait_for_database
+from tests.worker.relay_worker.worker_harness import RelayWorkerHarness, in_database
 from tests.worker.simulated_hoptalk_client import SimulatedHopTalkClient
 from tests.worker.simulated_hoptalk_client_records import OutgoingMessage, OutgoingMessageStatus
 from tests.worker.simulated_hoptalk_client_timing import ClientTiming, ScaledClock
@@ -50,7 +61,7 @@ from tests.worker.simulated_hoptalk_client_timing import ClientTiming, ScaledClo
 pytestmark = pytest.mark.django_db(transaction=True)
 
 SOAK_SEED = 34
-SOAK_TIME_FACTOR = 0.002
+SOAK_TIME_FACTOR = 0.005
 SPEED_UP_OVER_THE_SCENARIOS = SOAK_TIME_FACTOR / SCENARIO_TIME_FACTOR
 SOAK_MINIMUM_ACKNOWLEDGEMENT_WAIT_SECONDS = 0.03
 SOAK_UNKNOWN_ACKNOWLEDGEMENT_WAIT_SECONDS = 0.06
@@ -81,9 +92,9 @@ PART_COUNT_WEIGHTS = (45, 20, 10, 7, 5, 4, 3, 2, 2, 2)
 LOSS_PROBABILITY = 0.2
 DUPLICATE_PROBABILITY = 0.05
 REORDER_PROBABILITY = 0.1
-REORDER_DELAY_SECONDS = 0.02
+REORDER_DELAY_SECONDS = 10 * SOAK_TIME_FACTOR
 # The messages are sent and the troubles below happen within this stretch; afterwards the mesh heals.
-TROUBLED_SECONDS = 12.0
+TROUBLED_SECONDS = 6000 * SOAK_TIME_FACTOR
 DEVICES_SWITCHED_OFF = 4
 PHONES_AWAY = 3
 ASYMMETRIC_LINKS = 2
@@ -91,8 +102,13 @@ ASYMMETRIC_LINKS = 2
 TROUBLE_SHARE_RANGE = (0.05, 0.25)
 WORKER_CRASH_SHARES = (0.3, 0.7)
 NODE_REBOOT_SHARE = 0.5
-WORKER_RESTART_DELAY_SECONDS = 0.2
-CONVERGENCE_TIMEOUT_SECONDS = 30.0
+WORKER_RESTART_DELAY_SECONDS = 100 * SOAK_TIME_FACTOR
+# More than the longest message, so that one long message in flight does not hold the next one back.
+MAXIMUM_PARTS_IN_FLIGHT = 12
+NO_PROGRESS_TIMEOUT_SECONDS = 60.0
+UPLOAD_POLL_INTERVAL_SECONDS = 0.01
+# The worker's database work and these checks share one thread, so the checks leave it room.
+DATABASE_POLL_INTERVAL_SECONDS = 0.1
 SPARED_ROUTE_RESET_STATES = (
     OutboundPacket.RouteResetState.SKIPPED_LATE_ACKNOWLEDGEMENT,
     OutboundPacket.RouteResetState.SKIPPED_PATH_UPDATE,
@@ -146,6 +162,23 @@ async def soak_clients() -> AsyncIterator[dict[str, SimulatedHopTalkClient]]:
         f"{client!r}: {client.internal_errors!r}" for client in started_clients.values() if client.internal_errors
     ]
     assert client_errors == [], "a simulated client raised internally"
+
+
+class ScenarioClock:
+    """Seconds since the troubled stretch began, without the time spent waiting for the relay to catch up."""
+
+    def __init__(self) -> None:
+        self._started_at = time.monotonic()
+        self._paused_seconds = 0.0
+
+    def elapsed_seconds(self) -> float:
+        return time.monotonic() - self._started_at - self._paused_seconds
+
+    async def sleep_until(self, scenario_seconds: float) -> None:
+        await asyncio.sleep(max(0.0, scenario_seconds - self.elapsed_seconds()))
+
+    def add_pause(self, paused_seconds: float) -> None:
+        self._paused_seconds += paused_seconds
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -283,20 +316,72 @@ def plan_relay_troubles(
     return [*crashes, reboot]
 
 
+async def wait_until_no_work_remains(
+    read_remaining_work: Callable[[], Awaitable[int]], *, poll_interval_seconds: float, description: str
+) -> None:
+    """Wait until the remaining work is zero; fail once it has not reached a new low for NO_PROGRESS_TIMEOUT_SECONDS."""
+    smallest_remaining_work = await read_remaining_work()
+    last_progress_at = time.monotonic()
+    while smallest_remaining_work > 0:
+        await asyncio.sleep(poll_interval_seconds)
+        remaining_work = await read_remaining_work()
+        if remaining_work < smallest_remaining_work:
+            smallest_remaining_work = remaining_work
+            last_progress_at = time.monotonic()
+        elif time.monotonic() - last_progress_at >= NO_PROGRESS_TIMEOUT_SECONDS:
+            raise AssertionError(
+                f"No progress for {NO_PROGRESS_TIMEOUT_SECONDS} s towards {description}: {remaining_work} left"
+            )
+
+
+def count_parts_in_flight(
+    clients: dict[str, SimulatedHopTalkClient], sent_messages: list[tuple[str, OutgoingMessage]]
+) -> int:
+    """Parts the relay has not confirmed yet of messages whose client can reach its node and so keeps sending them.
+
+    A sender that cannot reach its node comes back only when its trouble ends, which waits for the
+    scenario clock: counting its parts would stop the clock for good.
+    """
+    return sum(
+        len(outgoing_message.missing_part_numbers())
+        for sender_device_name, outgoing_message in sent_messages
+        if outgoing_message.status is OutgoingMessageStatus.PENDING
+        and clients[sender_device_name].device.app_can_reach_node
+    )
+
+
+async def wait_for_the_relay_to_catch_up(
+    clients: dict[str, SimulatedHopTalkClient], sent_messages: list[tuple[str, OutgoingMessage]]
+) -> float:
+    """Wait until at most MAXIMUM_PARTS_IN_FLIGHT parts are in flight; returns the seconds waited."""
+    waiting_started_at = time.monotonic()
+
+    async def count_parts_over_the_limit() -> int:
+        return max(0, count_parts_in_flight(clients, sent_messages) - MAXIMUM_PARTS_IN_FLIGHT)
+
+    await wait_until_no_work_remains(
+        count_parts_over_the_limit,
+        poll_interval_seconds=UPLOAD_POLL_INTERVAL_SECONDS,
+        description=f"at most {MAXIMUM_PARTS_IN_FLIGHT} parts waiting to be confirmed",
+    )
+    return time.monotonic() - waiting_started_at
+
+
 async def run_the_troubled_stretch(
     clients: dict[str, SimulatedHopTalkClient],
     planned_messages: list[tuple[float, SoakMessage]],
     timed_actions: list[TimedAction],
 ) -> list[tuple[str, OutgoingMessage]]:
-    """Send every planned message and perform every trouble at its time; returns (sender device, message)."""
-    started_at = time.monotonic()
+    """Send every planned message and perform every trouble at its scenario time; returns (sender device, message)."""
+    scenario_clock = ScenarioClock()
     sent_messages: list[tuple[str, OutgoingMessage]] = []
     schedule: list[tuple[float, SoakMessage | TimedAction]] = [
         *planned_messages,
         *((timed_action.at_seconds, timed_action) for timed_action in timed_actions),
     ]
     for at_seconds, scheduled_item in sorted(schedule, key=lambda item: item[0]):
-        await asyncio.sleep(max(0.0, started_at + at_seconds - time.monotonic()))
+        await scenario_clock.sleep_until(at_seconds)
+        scenario_clock.add_pause(await wait_for_the_relay_to_catch_up(clients, sent_messages))
         if isinstance(scheduled_item, TimedAction):
             await scheduled_item.perform()
             continue
@@ -336,12 +421,20 @@ def count_deliveries_not_delivered() -> int:
     return MessageDelivery.objects.exclude(state=MessageDelivery.State.DELIVERED).count()
 
 
+def count_deliveries_not_delivered_and_pending_receipts() -> int:
+    return count_deliveries_not_delivered() + count_pending_receipts()
+
+
 def read_deliveries_not_delivered() -> list[MessageDelivery]:
     return list(MessageDelivery.objects.exclude(state=MessageDelivery.State.DELIVERED).order_by("id"))
 
 
 def count_pending_receipts() -> int:
     return ReceiptNotification.objects.filter(state=ReceiptNotification.State.PENDING).count()
+
+
+async def count_pending_messages(sent_messages: list[tuple[str, OutgoingMessage]]) -> int:
+    return sum(1 for _, outgoing_message in sent_messages if outgoing_message.status is OutgoingMessageStatus.PENDING)
 
 
 def read_stored_texts_by_sender_and_id() -> dict[tuple[str, int], str | None]:
@@ -392,25 +485,23 @@ async def test_a_randomised_soak_ends_with_every_message_delivered_to_every_devi
 
     sent_messages = await run_the_troubled_stretch(clients, planned_messages, timed_actions)
     heal_the_mesh(devices)
-    await wait_until(
-        lambda: all(
-            outgoing_message.status is not OutgoingMessageStatus.PENDING for _, outgoing_message in sent_messages
-        ),
-        timeout_seconds=CONVERGENCE_TIMEOUT_SECONDS,
+    await wait_until_no_work_remains(
+        lambda: count_pending_messages(sent_messages),
+        poll_interval_seconds=UPLOAD_POLL_INTERVAL_SECONDS,
         description="the relay to accept every message",
     )
-    await wait_for_database(
-        lambda: count_deliveries_in_progress() == 0,
-        timeout_seconds=CONVERGENCE_TIMEOUT_SECONDS,
+    await wait_until_no_work_remains(
+        lambda: in_database(count_deliveries_in_progress),
+        poll_interval_seconds=DATABASE_POLL_INTERVAL_SECONDS,
         description="every delivery to be delivered or given up",
     )
     deliveries_given_up = await in_database(read_deliveries_not_delivered)
     for device_name, client in clients.items():
         for peer_username in sorted(set(DEVICE_USERNAMES.values()) - {DEVICE_USERNAMES[device_name]}):
             client.open_conversation(peer_username)
-    await wait_for_database(
-        lambda: count_deliveries_not_delivered() == 0 and count_pending_receipts() == 0,
-        timeout_seconds=CONVERGENCE_TIMEOUT_SECONDS,
+    await wait_until_no_work_remains(
+        lambda: in_database(count_deliveries_not_delivered_and_pending_receipts),
+        poll_interval_seconds=DATABASE_POLL_INTERVAL_SECONDS,
         description="every delivery to be delivered and every receipt settled",
     )
     await wait_until(

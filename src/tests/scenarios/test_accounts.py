@@ -39,7 +39,7 @@ from tests.scenarios.accounts_and_messages_helpers import (
     wait_for_answered_refresh_of_every_conversation,
     wait_until_worker_time_passes,
 )
-from tests.scenarios.scenario_settings import SCENARIO_WORKER_TIMING
+from tests.scenarios.scenario_settings import PATIENT_SCENARIO_CLIENT_TIMING, SCENARIO_WORKER_TIMING
 from tests.scenarios.scenario_setup import DEFAULT_PASSWORD, ClientStarter, sign_in
 from tests.worker.fake_node.fake_companion_firmware import FakeCompanionFirmware
 from tests.worker.fake_node.simulated_mesh import SimulatedDevice, SimulatedMesh
@@ -148,7 +148,7 @@ async def test_a_retried_registration_whose_answer_was_lost_gets_the_answer_and_
         text_is("HT1 a alice"),
         applies=until_the_relay_node_took(simulated_mesh, alice_device, "HT1 A alice ", count=2),
     )
-    alice = start_client(alice_device)
+    alice = start_client(alice_device, timing=PATIENT_SCENARIO_CLIENT_TIMING)
 
     registration = alice.sign_in("alice", DEFAULT_PASSWORD)
     await wait_for_database(
@@ -187,14 +187,14 @@ async def test_wrong_passwords_count_per_device_retries_included_and_rate_limit_
     phone_device, tablet_device = await start_relay_with_devices(
         relay_worker, fake_companion_firmware, simulated_mesh, "ivan-phone", "ivan-tablet"
     )
-    phone = start_client(phone_device)
+    phone = start_client(phone_device, timing=PATIENT_SCENARIO_CLIENT_TIMING)
     await sign_in(phone, "ivan")
     lost_wrong_password_errors = lose_direct_messages_to(
         tablet_device,
         text_is("HT1 e WRONG_PASSWORD A ivan"),
         applies=until_the_relay_node_took(simulated_mesh, tablet_device, "HT1 A ivan ", count=2),
     )
-    tablet = start_client(tablet_device)
+    tablet = start_client(tablet_device, timing=PATIENT_SCENARIO_CLIENT_TIMING)
 
     retried_wrong_sign_in = tablet.sign_in("ivan", WRONG_PASSWORD)
     await retried_wrong_sign_in.wait_until_finished()
@@ -283,7 +283,7 @@ async def test_switching_accounts_sets_the_old_requests_aside_cancels_the_old_de
     )
     zoe = start_client(zoe_device)
     yvonne = start_client(yvonne_device)
-    shared = start_client(shared_device)
+    shared = start_client(shared_device, timing=PATIENT_SCENARIO_CLIENT_TIMING)
     await sign_in(zoe, "zoe")
     await sign_in(yvonne, "yvonne")
     await sign_in(shared, "xavier")
@@ -414,7 +414,7 @@ async def test_a_delayed_sign_in_as_the_previous_account_moves_the_device_back_a
     )
     yvonne = start_client(yvonne_device)
     await sign_in(yvonne, "yvonne")
-    shared = start_client(shared_device)
+    shared = start_client(shared_device, timing=PATIENT_SCENARIO_CLIENT_TIMING)
     await sign_in(shared, "xavier")
     [sign_in_as_xavier] = find_sent_direct_messages(shared, "HT1 A xavier ")
     await sign_in(shared, "yvonne")
@@ -460,7 +460,7 @@ async def test_relinking_a_device_back_revives_its_cancelled_deliveries_oldest_f
         relay_worker, fake_companion_firmware, simulated_mesh, "zoe-phone", "shared-phone"
     )
     zoe = start_client(zoe_device)
-    shared = start_client(shared_device)
+    shared = start_client(shared_device, timing=PATIENT_SCENARIO_CLIENT_TIMING)
     await sign_in(zoe, "zoe")
     await sign_in(shared, "xavier")
     away_period = LossPeriod()

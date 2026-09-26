@@ -7,10 +7,13 @@ or the stock MeshCore app typed by hand, sit on the devices; chosen direct messa
 import asyncio
 import time
 from collections.abc import AsyncIterator, Callable
+from dataclasses import replace
 from datetime import datetime, timedelta
 
 import pytest
+from pytest_django import Settings
 
+from hoptalk_relay.relay_settings import RelaySettings
 from messaging.models import InboundDirectMessage, MessageDelivery, OutboundPacket
 from protocol.constants import INCOMPLETE_MESSAGE_RETENTION_HOURS, RECEIVED_SET_MISSING
 from protocol.formatting import format_message_part_request
@@ -46,7 +49,7 @@ from tests.scenarios.scenario_settings import (
 )
 from tests.scenarios.scenario_setup import ClientStarter, sign_in
 from tests.worker.fake_node.fake_companion_firmware import FakeCompanionFirmware
-from tests.worker.fake_node.simulated_mesh import SimulatedDevice, SimulatedMesh
+from tests.worker.fake_node.simulated_mesh import LinkPolicy, SimulatedDevice, SimulatedMesh
 from tests.worker.relay_worker.worker_harness import (
     DATABASE_POLL_INTERVAL_SECONDS,
     RelayWorkerHarness,
@@ -602,6 +605,8 @@ IGNORED_TEXTS = (
     "HT1 e SYNTAX ?",
     "HT2 e VERSION ? 1",
 )
+# The same delay for every packet: lines typed back to back cannot overtake one another on the way.
+IN_ORDER_DELAY_SECONDS = 0.002
 IGNORED_TEXT_CLASSIFICATIONS = [
     InboundDirectMessage.Classification.NOT_PROTOCOL,
     InboundDirectMessage.Classification.NOT_PROTOCOL,
@@ -621,6 +626,9 @@ async def test_other_text_server_types_errors_of_another_relay_and_firmware_repe
 ) -> None:
     alice_device, bob_device = await start_relay_with_devices(
         relay_worker, fake_companion_firmware, simulated_mesh, "alice-phone", "bob-phone"
+    )
+    alice_device.uplink = LinkPolicy(
+        minimum_delay_seconds=IN_ORDER_DELAY_SECONDS, maximum_delay_seconds=IN_ORDER_DELAY_SECONDS
     )
     alice_app = StockMeshCoreApp(alice_device)
     bob_app = StockMeshCoreApp(bob_device)
@@ -671,11 +679,36 @@ def read_processed_at(inbox_rows: list[InboundDirectMessage], text: str) -> date
     return inbox_row.processed_at
 
 
+# The time factor scales the relay's pauses but not the machine's own work: a packet's way to a phone and the typed
+# answer's way back, or a complete status waiting behind the delivery packet the sender loop took just before the
+# status was queued, and the pacing gap after it. On a busy machine that work outlasts the scaled coalescing pause
+# and first retry pause, so the hand-testing session makes both far longer: a line typed at once always answers
+# before the next round, and a complete status sent within the coalescing pause did not wait for it.
+HAND_TESTING_STATUS_COALESCING = timedelta(seconds=1)
+HAND_TESTING_FIRST_RETRY_PAUSE = timedelta(seconds=1.5)
+
+
+def give_the_relay_hand_testing_pauses(relay_worker: RelayWorkerHarness, settings: Settings) -> None:
+    relay_settings: RelaySettings = settings.RELAY_SETTINGS
+    settings.RELAY_SETTINGS = replace(
+        relay_settings,
+        retry_strategy=replace(
+            relay_settings.retry_strategy, initial_pause_seconds=HAND_TESTING_FIRST_RETRY_PAUSE.total_seconds()
+        ),
+    )
+    relay_worker.timing = replace(
+        relay_worker.timing, incomplete_status_coalescing_seconds=HAND_TESTING_STATUS_COALESCING.total_seconds()
+    )
+    relay_worker.worker = relay_worker.build_worker()
+
+
 async def test_the_hand_testing_session_typed_in_the_stock_app_gets_every_expected_answer_and_its_repeats_are_ignored(
     relay_worker: RelayWorkerHarness,
     fake_companion_firmware: FakeCompanionFirmware,
     simulated_mesh: SimulatedMesh,
+    settings: Settings,
 ) -> None:
+    give_the_relay_hand_testing_pauses(relay_worker, settings)
     phone_a_device, phone_b_device = await start_relay_with_devices(
         relay_worker, fake_companion_firmware, simulated_mesh, "phone-a", "phone-b"
     )
@@ -763,8 +796,8 @@ async def test_the_hand_testing_session_typed_in_the_stock_app_gets_every_expect
     phone_a_packets = await in_database(read_packets_to, phone_a_device)
     first_part_at = read_processed_at(phone_a_rows, "HT1 M bob 2 1/2 Hello ")
     second_part_at = read_processed_at(phone_a_rows, "HT1 M bob 2 2/2 again")
-    assert read_sent_at(phone_a_packets, "HT1 k bob 2 10") - first_part_at >= INCOMPLETE_STATUS_COALESCING
-    assert read_sent_at(phone_a_packets, "HT1 k bob 2 11") - second_part_at < INCOMPLETE_STATUS_COALESCING
+    assert read_sent_at(phone_a_packets, "HT1 k bob 2 10") - first_part_at >= HAND_TESTING_STATUS_COALESCING
+    assert read_sent_at(phone_a_packets, "HT1 k bob 2 11") - second_part_at < HAND_TESTING_STATUS_COALESCING
     first_message = await in_database(read_message, "alice", 1)
     assert first_message is not None
     assert first_message.delivered_at is not None
@@ -776,5 +809,5 @@ async def test_the_hand_testing_session_typed_in_the_stock_app_gets_every_expect
     ]
     assert first_copy.queued_at is not None
     assert second_copy.prepared_at is not None
-    assert second_copy.prepared_at - first_copy.queued_at >= FIRST_RETRY_PAUSE
+    assert second_copy.prepared_at - first_copy.queued_at >= HAND_TESTING_FIRST_RETRY_PAUSE
     await in_database(assert_all_invariants)

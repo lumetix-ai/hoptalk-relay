@@ -4,7 +4,8 @@ import asyncio
 import functools
 import itertools
 from collections import Counter
-from datetime import timedelta
+from dataclasses import dataclass, field, replace
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -39,15 +40,21 @@ from tests.scenarios.delivery_receipts_routes_helpers import (
     wait_until_relay_is_quiet,
     wait_until_worker_clock_passes,
 )
-from tests.scenarios.scenario_settings import SCENARIO_CLIENT_TIMING, SCENARIO_ENGINE_TIMING, SCENARIO_PACING
-from tests.scenarios.scenario_setup import ClientStarter
+from tests.scenarios.refresh_lifecycle_admin_helpers import make_relay_node_suggest_radio_like_acknowledgement_waits
+from tests.scenarios.scenario_settings import (
+    PATIENT_SCENARIO_CLIENT_TIMING,
+    SCENARIO_CLIENT_TIMING,
+    SCENARIO_ENGINE_TIMING,
+    SCENARIO_PACING,
+)
+from tests.scenarios.scenario_setup import ClientStarter, sign_in
 from tests.worker.fake_node.fake_companion_firmware import (
     FakeCompanionFirmware,
     MessageSentReplyOrder,
     ReceptionOutcome,
 )
 from tests.worker.fake_node.frames import DIRECT_ARRIVAL_PATH_LENGTH, FirmwareErrorCode, PushCode
-from tests.worker.fake_node.radio_packets import DirectMessagePacket
+from tests.worker.fake_node.radio_packets import DirectMessagePacket, PathReturnPacket, RadioPacket
 from tests.worker.fake_node.simulated_mesh import DeliveryOutcome, LinkPolicy, SimulatedMesh
 from tests.worker.fake_node.waiting import wait_until
 from tests.worker.relay_worker.worker_harness import RelayWorkerHarness, in_database, wait_for_database
@@ -88,6 +95,39 @@ MAXIMUM_PACKETS_AWAITING_ACKNOWLEDGEMENT = SCENARIO_PACING.maximum_packets_await
 MAXIMUM_ACTIVE_DELIVERIES_PER_DEVICE = SCENARIO_PACING.maximum_active_deliveries_per_device
 MINIMUM_GAP_BETWEEN_SENDS_SECONDS = SCENARIO_PACING.minimum_seconds_between_sends
 RECENT_PATH_UPDATE_WINDOW = timedelta(seconds=SCENARIO_ENGINE_TIMING.recent_path_update_seconds)
+# Far longer than the relay needs between two parts of one round, however busy the machine is.
+UNHURRIED_STATUS_COALESCING_SECONDS = 0.5
+
+
+def give_the_relay_an_unhurried_status_coalescing(relay_worker: RelayWorkerHarness) -> None:
+    """No incomplete status asks for parts that are still on their way, so no part is sent twice unasked."""
+    relay_worker.timing = replace(
+        relay_worker.timing, incomplete_status_coalescing_seconds=UNHURRIED_STATUS_COALESCING_SECONDS
+    )
+    relay_worker.worker = relay_worker.build_worker()
+
+
+@dataclass(kw_only=True)
+class ReciprocalPathHoldingLinkPolicy(LinkPolicy):
+    """Holds back the first returned path without an ACK, the answer to a flooded one, until the test sends it on."""
+
+    held_reciprocal_paths: list[PathReturnPacket] = field(default_factory=list)
+
+    def loss_probability_for(self, packet: RadioPacket) -> float:
+        if isinstance(packet, PathReturnPacket) and packet.acknowledgement is None and not self.held_reciprocal_paths:
+            self.held_reciprocal_paths.append(packet)
+            return CERTAIN_LOSS_PROBABILITY
+        return super().loss_probability_for(packet)
+
+
+def was_the_route_reset_after_the_first_status(device_id: int) -> bool:
+    status_rows = read_inbox_rows_from(device_id, "HT1 K alice ")
+    return bool(status_rows) and status_rows[0].route_reset_performed
+
+
+def has_path_update_after(public_key: bytes, moment: datetime) -> bool:
+    last_path_update_at = read_contact(public_key).last_path_update_at
+    return last_path_update_at is not None and last_path_update_at > moment
 
 
 def is_packet_in_state(packet_id: int, state: OutboundPacket.State) -> bool:
@@ -212,15 +252,33 @@ async def test_a_status_that_floods_while_the_acks_back_are_lost_teaches_the_rou
 
     # Bob's node forgets its route to the relay, so its firmware ACK and its status both flood.
     assert bob_device.reset_route_to_relay()
-    bob_device.uplink = LinkPolicy(
+    bob_uplink = ReciprocalPathHoldingLinkPolicy(
         acknowledgement_loss_probability=CERTAIN_LOSS_PROBABILITY,
         minimum_delay_seconds=RADIO_HOP_MINIMUM_DELAY_SECONDS,
         maximum_delay_seconds=RADIO_HOP_MAXIMUM_DELAY_SECONDS,
     )
+    bob_device.uplink = bob_uplink
     bob_device.downlink = LinkPolicy(
         minimum_delay_seconds=RADIO_HOP_MINIMUM_DELAY_SECONDS, maximum_delay_seconds=RADIO_HOP_MAXIMUM_DELAY_SECONDS
     )
     first_message = alice.send_message("bob", FIRST_TEXT)
+    # The relay resets its route to Bob after his flooded status. Bob's node answers the path the relay's node
+    # returned with its own path back, two hops of airtime later on a real mesh: that answer waits until the
+    # reset is done, so that a slow worker does not reset the route it has just been taught.
+    await wait_for_database(
+        functools.partial(was_the_route_reset_after_the_first_status, bob_device_id),
+        description="the relay to reset its route to Bob after his flooded status",
+    )
+    await wait_until(
+        lambda: bool(bob_uplink.held_reciprocal_paths), description="Bob's node to send its path back to the relay"
+    )
+    first_status_row = (await in_database(read_inbox_rows_from, bob_device_id, "HT1 K alice "))[0]
+    [reciprocal_path] = bob_uplink.held_reciprocal_paths
+    simulated_mesh.transmit(bob_device.firmware, reciprocal_path)
+    await wait_for_database(
+        functools.partial(has_path_update_after, bob_device.public_key, first_status_row.received_at),
+        description="the relay to record the route Bob's node sent back",
+    )
     await first_message.wait_for_status(OutgoingMessageStatus.DELIVERED)
     second_message = alice.send_message("bob", SECOND_TEXT)
     await second_message.wait_for_status(OutgoingMessageStatus.DELIVERED)
@@ -228,7 +286,6 @@ async def test_a_status_that_floods_while_the_acks_back_are_lost_teaches_the_rou
     await relay_worker.stop()
 
     packets_to_bob = await in_database(read_packets, contact_id=bob_device_id, id__gt=highest_packet_id_before)
-    first_status_row = (await in_database(read_inbox_rows_from, bob_device_id, "HT1 K alice "))[0]
     assert first_status_row.path_length != DIRECT_ARRIVAL_PATH_LENGTH
     assert [packet.purpose for packet in packets_to_bob] == [PacketPurpose.DELIVERY] * 2
     assert [packet.route for packet in packets_to_bob] == [PacketRoute.DIRECT] * 2
@@ -438,10 +495,12 @@ async def test_a_client_whose_node_packet_pool_is_full_waits_and_resends_with_ne
     simulated_mesh: SimulatedMesh,
     start_client: ClientStarter,
 ) -> None:
+    give_the_relay_an_unhurried_status_coalescing(relay_worker)
     devices = await start_relay_with_devices(
         relay_worker, fake_companion_firmware, simulated_mesh, "alice-phone", "bob-phone"
     )
-    alice = await start_signed_in_client(start_client, devices["alice-phone"], "alice")
+    alice = start_client(devices["alice-phone"], timing=PATIENT_SCENARIO_CLIENT_TIMING)
+    await sign_in(alice, "alice")
     bob = await start_signed_in_client(start_client, devices["bob-phone"], "bob")
     alice_device_id = await in_database(read_contact_id, devices["alice-phone"].public_key)
     await wait_until_relay_is_quiet(relay_worker, simulated_mesh, [alice, bob])
@@ -590,7 +649,9 @@ async def test_a_burst_of_twenty_deliveries_to_five_devices_keeps_the_ack_places
     await wait_until_relay_is_quiet(relay_worker, simulated_mesh, [alice, *recipients.values()])
 
     # The recipients' firmware ACKs are lost and their apps answer nothing, so deliveries pile up and every
-    # packet to them holds its place until its deadline.
+    # packet to them holds its place until its deadline. The node suggests radio-like ACK waits, so that
+    # deadline lies several sends away even when the worker sends slowly, and the burst fills the places.
+    make_relay_node_suggest_radio_like_acknowledgement_waits(fake_companion_firmware)
     for device_name in recipient_device_names.values():
         devices[device_name].uplink = LinkPolicy(acknowledgement_loss_probability=CERTAIN_LOSS_PROBABILITY)
         devices[device_name].phone_leaves()
@@ -685,10 +746,14 @@ async def test_channel_datagrams_between_direct_messages_in_the_node_queue_are_d
     start_client: ClientStarter,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    give_the_relay_an_unhurried_status_coalescing(relay_worker)
     devices = await start_relay_with_devices(
         relay_worker, fake_companion_firmware, simulated_mesh, "alice-phone", "bob-phone"
     )
-    alice = await start_signed_in_client(start_client, devices["alice-phone"], "alice")
+    # Alice's parts wait in the node's queue until the relay drains it, which on a busy machine outlasts a scaled
+    # retry pause.
+    alice = start_client(devices["alice-phone"], timing=PATIENT_SCENARIO_CLIENT_TIMING)
+    await sign_in(alice, "alice")
     bob = await start_signed_in_client(start_client, devices["bob-phone"], "bob")
     alice_device_id = await in_database(read_contact_id, devices["alice-phone"].public_key)
     await wait_until_relay_is_quiet(relay_worker, simulated_mesh, [alice, bob])

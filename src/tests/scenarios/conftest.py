@@ -23,7 +23,7 @@ from tests.worker.fake_node.fake_node_transport import FakeNodeConnector
 from tests.worker.fake_node.simulated_mesh import SimulatedDevice
 from tests.worker.relay_worker.worker_harness import RelayWorkerHarness
 from tests.worker.simulated_hoptalk_client import SimulatedHopTalkClient
-from tests.worker.simulated_hoptalk_client_timing import ScaledClock
+from tests.worker.simulated_hoptalk_client_timing import ClientTiming, ScaledClock
 
 
 @pytest.fixture(autouse=True)
@@ -59,8 +59,10 @@ async def start_client(client_clock: ScaledClock) -> AsyncIterator[ClientStarter
     """Start a reference client on a device; every client is stopped afterwards and must not have raised."""
     started_clients: list[SimulatedHopTalkClient] = []
 
-    def start_client_on(device: SimulatedDevice) -> SimulatedHopTalkClient:
-        client = SimulatedHopTalkClient(device, timing=SCENARIO_CLIENT_TIMING, clock=client_clock)
+    def start_client_on(
+        device: SimulatedDevice, *, timing: ClientTiming = SCENARIO_CLIENT_TIMING
+    ) -> SimulatedHopTalkClient:
+        client = SimulatedHopTalkClient(device, timing=timing, clock=client_clock)
         client.start()
         started_clients.append(client)
         return client

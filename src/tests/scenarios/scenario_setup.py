@@ -1,21 +1,28 @@
 """The steps most scenarios start with: devices the operator added from their cards, and signed-in clients."""
 
-from collections.abc import Callable
+from typing import Protocol
 
 from django.utils import timezone
 
 from directory.contacts import add_contact_from_card
 from directory.models import Contact
 from node.contact_cards import parse_contact_card_uri
+from tests.scenarios.scenario_settings import SCENARIO_CLIENT_TIMING
 from tests.worker.fake_node.simulated_mesh import SimulatedDevice, SimulatedMesh
 from tests.worker.relay_worker.worker_harness import in_database
 from tests.worker.simulated_hoptalk_client import SimulatedHopTalkClient
 from tests.worker.simulated_hoptalk_client_records import ConversationRefresh
+from tests.worker.simulated_hoptalk_client_timing import ClientTiming
 
 DEFAULT_PASSWORD = "correct horse battery"
 
-# The start_client fixture: starts a reference client on a device.
-type ClientStarter = Callable[[SimulatedDevice], SimulatedHopTalkClient]
+
+class ClientStarter(Protocol):
+    """The start_client fixture: starts a reference client on a device."""
+
+    def __call__(
+        self, device: SimulatedDevice, *, timing: ClientTiming = SCENARIO_CLIENT_TIMING
+    ) -> SimulatedHopTalkClient: ...
 
 
 async def add_device_from_its_card(simulated_mesh: SimulatedMesh, device_name: str) -> SimulatedDevice:

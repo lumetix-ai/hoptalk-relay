@@ -19,6 +19,12 @@ from tests.worker.simulated_hoptalk_client_timing import ClientTiming
 
 SCENARIO_TIME_FACTOR = 0.01
 SCENARIO_CLIENT_TIMING = ClientTiming().scaled_by(SCENARIO_TIME_FACTOR)
+# For a scenario that counts what a client sends: the relay's own work is not scaled, and on a busy machine its
+# answer can come later than the scaled first retry pause, which would send the request again unasked.
+PATIENT_SCENARIO_CLIENT_TIMING = replace(
+    SCENARIO_CLIENT_TIMING,
+    retry_pauses_seconds=tuple(5 * retry_pause for retry_pause in SCENARIO_CLIENT_TIMING.retry_pauses_seconds),
+)
 SCENARIO_WORKER_TIMING = replace(
     FAST_WORKER_TIMING,
     incomplete_status_coalescing_seconds=INCOMPLETE_SEND_STATUS_COALESCING_SECONDS * SCENARIO_TIME_FACTOR,

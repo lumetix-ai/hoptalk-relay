@@ -17,11 +17,13 @@ from node.setup_runs import CONFIGURE_NODE_STEP_LABELS, ConfigureNodeStep, Facto
 from node.worker_status import BannerKind, collect_banners, read_worker_status
 from tests.invariants import assert_all_invariants
 from tests.panel_operator import PanelOperator
+from tests.scenarios.accounts_and_messages_helpers import count_processed_inbox_rows_from
 from tests.scenarios.refresh_lifecycle_admin_helpers import (
     DirectMessageTrigger,
     OperatorBrowser,
     install_triggering_links,
     kill_relay_worker,
+    make_relay_node_suggest_radio_like_acknowledgement_waits,
     poll_partial_until_it_stops,
     put_node_port_gate_before_worker,
     read_delivery,
@@ -52,9 +54,6 @@ pytestmark = pytest.mark.django_db(transaction=True)
 THREE_PART_TEXT = "Three parts. " + "abcdefgh " * 25
 DELIVERY_TIMEOUT_SECONDS = 10.0
 NODE_CLOCK_BEHIND_AFTER_BOOT_SECONDS = 3600
-# After a part to a switched-off device left the node: the worker has recorded it and waits for its
-# firmware ACK, which never comes, for at least the scenario's 0.1 s floor.
-MOMENT_THE_RELAY_AWAITS_THE_FIRMWARE_ACK_SECONDS = 0.03
 # Farther apart than this, the handshake sets the node's clock.
 NODE_CLOCK_TOLERANCE_SECONDS = 5
 
@@ -180,6 +179,11 @@ async def test_a_request_recorded_but_not_processed_when_the_worker_died_is_proc
     start_new_relay_worker_process(relay_worker)
     [received_message] = await bob.wait_for_received_messages("alice", 1, timeout_seconds=DELIVERY_TIMEOUT_SECONDS)
     await message.wait_for_status(OutgoingMessageStatus.DELIVERED)
+    # Alice confirms the delivered receipt as soon as it arrives, so the relay may not have processed that "C" yet.
+    await wait_for_database(
+        lambda: count_processed_inbox_rows_from(devices["alice-phone"], "HT1 C ") >= 1,
+        description="alice's confirmation of the delivered receipt to be processed",
+    )
 
     assert received_message.text == message.text
     processed_row = await in_database(InboundDirectMessage.objects.get, id=held_row_id)
@@ -217,15 +221,27 @@ async def test_after_a_node_reboot_the_worker_reconnects_restores_the_node_drain
     alice_device, bob_device = devices["alice-phone"], devices["bob-phone"]
     alice = await start_signed_in_client(start_client, alice_device, "alice")
     bob = await start_signed_in_client(start_client, bob_device, "bob")
+    # A part to the switched-off device then awaits its firmware ACK, which never comes, for most of a second.
+    make_relay_node_suggest_radio_like_acknowledgement_waits(fake_companion_firmware)
+    # The event loop keeps only a weak reference to a task.
+    reboot_tasks: list[asyncio.Task[None]] = []
 
-    def reboot_the_node_while_its_port_is_gone() -> None:
+    def is_a_part_awaiting_its_firmware_ack() -> bool:
+        return any(
+            awaited_packet.purpose == OutboundPacket.Purpose.DELIVERY
+            for awaited_packet in relay_worker.worker.acknowledgement_tracker.packets_awaiting_acknowledgement
+        )
+
+    async def reboot_the_node_while_its_port_is_gone() -> None:
+        # The relay may send alice's complete status after the first part to bob. Lost with a reboot before it
+        # left, alice would wait for it while the node's port stays gone.
+        await message_to_bob.wait_for_status(OutgoingMessageStatus.SENT)
+        await wait_until(is_a_part_awaiting_its_firmware_ack, description="a part to bob to await its firmware ACK")
         node_port_gate.close()
         fake_companion_firmware.reboot()
 
     def reboot_once_the_part_awaits_its_firmware_ack() -> None:
-        asyncio.get_running_loop().call_later(
-            MOMENT_THE_RELAY_AWAITS_THE_FIRMWARE_ACK_SECONDS, reboot_the_node_while_its_port_is_gone
-        )
+        reboot_tasks.append(asyncio.create_task(reboot_the_node_while_its_port_is_gone()))
 
     _bob_uplink, bob_downlink = install_triggering_links(bob_device)
     bob_downlink.add_trigger(

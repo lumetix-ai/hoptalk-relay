@@ -35,6 +35,11 @@ from worker.worker_state import RelayMode
 pytestmark = pytest.mark.django_db(transaction=True)
 
 SENDING_DEVICE_NUMBER = 901
+# What a real radio's airtime makes a node suggest. The worker then waits most of a second for an ACK (1.2 times
+# this, at most FAST_ENGINE_TIMING's 1 s) instead of the 0.1 s floor the fake's own suggestions get.
+RADIO_LIKE_SUGGESTED_TIMEOUT_MILLISECONDS = 800
+# Twelve packets that wait most of a second each, three at a time.
+PACKETS_WITHOUT_ACK_TIMEOUT_SECONDS = 20.0
 
 
 async def prepare_deliveries_to_bob(
@@ -65,6 +70,15 @@ def count_packets(**filters: Any) -> int:
     return OutboundPacket.objects.filter(**filters).count()
 
 
+def make_relay_node_suggest_radio_like_acknowledgement_waits(firmware: FakeCompanionFirmware) -> None:
+    firmware.timing = replace(
+        firmware.timing,
+        flood_suggested_timeout_milliseconds=RADIO_LIKE_SUGGESTED_TIMEOUT_MILLISECONDS,
+        direct_suggested_timeout_base_milliseconds=RADIO_LIKE_SUGGESTED_TIMEOUT_MILLISECONDS,
+        direct_suggested_timeout_per_hop_milliseconds=0,
+    )
+
+
 def use_pacing(settings: Settings, relay_worker: RelayWorkerHarness, **pacing_changes: Any) -> None:
     settings.RELAY_SETTINGS = replace(settings.RELAY_SETTINGS, pacing=replace(FAST_PACING, **pacing_changes))
     relay_worker.worker = relay_worker.build_worker()
@@ -80,6 +94,8 @@ async def test_never_more_packets_await_an_ack_than_allowed_and_never_all_of_the
         part_count=4,
         bob_device_uplink=LinkPolicy(acknowledgement_loss_probability=1.0),
     )
+    # Every packet then holds its place long enough for the worker to fill the others, however slowly it sends.
+    make_relay_node_suggest_radio_like_acknowledgement_waits(fake_companion_firmware)
     tracker = relay_worker.worker.acknowledgement_tracker
     samples: list[tuple[int, int]] = []
 
@@ -95,6 +111,7 @@ async def test_never_more_packets_await_an_ack_than_allowed_and_never_all_of_the
     try:
         await wait_for_database(
             lambda: count_packets(state=OutboundPacket.State.ACKNOWLEDGEMENT_TIMED_OUT) >= 12,
+            timeout_seconds=PACKETS_WITHOUT_ACK_TIMEOUT_SECONDS,
             description="twelve packets without their ACK",
         )
     finally:
