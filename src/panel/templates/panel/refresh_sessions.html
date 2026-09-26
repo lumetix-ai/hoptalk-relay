@@ -1,0 +1,79 @@
+{% extends "panel/base.html" %}
+{% load heroicons panel_formatting %}
+{% block title %}Refresh sessions · HopTalk Relay{% endblock title %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Messages</h1>
+      <p class="page-description">
+        A refresh re-delivers a peer's missed messages to one device, oldest first and one at a time; it stops at the first message that cannot be delivered.
+      </p>
+    </div>
+  </div>
+  {% include "panel/includes/message_tabs.html" with active_tab="refresh_sessions" %}
+  <div class="card">
+    {% if refresh_sessions %}
+      <ul class="divide-y divide-slate-100 dark:divide-slate-800">
+        {% for refresh_session in refresh_sessions %}
+          <li id="refresh-session-{{ refresh_session.pk }}">
+            <details class="group">
+              <summary class="flex cursor-pointer list-none flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 hover:bg-slate-50 sm:px-5 dark:hover:bg-slate-800/50">
+                {% heroicon_mini "chevron-right" class="size-4 text-slate-400 transition-transform group-open:rotate-90" %}
+                <span class="text-xs font-medium text-slate-500 dark:text-slate-400">#{{ refresh_session.pk }}</span>
+                <span class="text-sm">
+                  <span class="font-medium">{{ refresh_session.device }}</span>
+                  {% if refresh_session.device.user %}<span class="text-slate-500 dark:text-slate-400">(@{{ refresh_session.device.user.username }})</span>{% endif %}
+                  <span class="text-slate-500 dark:text-slate-400">from</span>
+                  <span class="font-medium">@{{ refresh_session.peer.username }}</span>
+                </span>
+                {% include "panel/includes/state_badge.html" with state=refresh_session.state %}
+                {% if refresh_session.requested_for_all_peers %}<span class="badge badge-neutral">F *</span>{% endif %}
+                <span class="text-xs text-slate-500 tabular-nums dark:text-slate-400">
+                  {{ refresh_session.requested_at|date:"j M, H:i:s" }}
+                  {% if refresh_session.finished_at %}→ {{ refresh_session.finished_at|date:"H:i:s" }}{% endif %}
+                  · {{ refresh_session.messages_total }} message{{ refresh_session.messages_total|pluralize }}
+                </span>
+                {% for delivery in refresh_session.deliveries.all %}
+                  {% if delivery.state == "pending" %}
+                    <span class="badge badge-information">head {{ delivery.message.client_message_id|short_message_id }} {{ delivery.attempt_count }}/{{ delivery.maximum_attempts }}</span>
+                  {% endif %}
+                {% endfor %}
+              </summary>
+              <div class="border-t border-slate-100 bg-slate-50/60 px-4 py-3 sm:px-5 dark:border-slate-800 dark:bg-slate-950/40">
+                {% if refresh_session.deliveries.all %}
+                  <ol class="space-y-1 text-sm">
+                    {% for delivery in refresh_session.deliveries.all %}
+                      <li class="flex flex-wrap items-center gap-2">
+                        <span class="w-6 text-right text-xs text-slate-500 tabular-nums dark:text-slate-400">{{ forloop.counter }}.</span>
+                        <span class="font-mono text-xs">{{ delivery.message.client_message_id }}</span>
+                        <span class="text-xs text-slate-500 dark:text-slate-400">accepted {{ delivery.message.accepted_at|date:"j M, H:i:s" }}</span>
+                        {% include "panel/includes/state_badge.html" with state=delivery.state %}
+                        <span class="text-xs text-slate-500 tabular-nums dark:text-slate-400">{{ delivery.attempt_count }}/{{ delivery.maximum_attempts }}</span>
+                      </li>
+                    {% endfor %}
+                  </ol>
+                {% else %}
+                  <p class="text-sm text-slate-500 dark:text-slate-400">Nothing was missing.</p>
+                {% endif %}
+              </div>
+            </details>
+          </li>
+        {% endfor %}
+      </ul>
+      <div class="flex items-center gap-3 border-t border-slate-200 px-4 py-3 text-sm sm:px-5 dark:border-slate-800">
+        {% if not is_first_page %}
+          <a href="{% url 'panel:refresh_sessions' %}" class="text-link">Newest</a>
+        {% endif %}
+        {% if older_sessions_before %}
+          <a href="{% url 'panel:refresh_sessions' %}?before={{ older_sessions_before }}"
+             class="text-link ml-auto">Older</a>
+        {% endif %}
+      </div>
+    {% else %}
+      <div class="empty-state">
+        {% heroicon_outline "arrow-path" class="size-8" %}
+        <p>No device has asked for a refresh yet.</p>
+      </div>
+    {% endif %}
+  </div>
+{% endblock content %}

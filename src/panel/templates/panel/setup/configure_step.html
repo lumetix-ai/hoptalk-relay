@@ -1,0 +1,98 @@
+{% load heroicons %}
+<section class="card" aria-labelledby="configure-title">
+  <div class="card-header">
+    <h2 id="configure-title" class="card-title">
+      {% heroicon_outline "adjustments-horizontal" class="size-5 text-slate-500" %}
+      Configure the node
+    </h2>
+  </div>
+  <div class="card-body space-y-6">
+    <div class="alert alert-information">
+      {% heroicon_outline "information-circle" class="size-5 shrink-0" %}
+      <p>
+        The node was factory reset. Its new identity is <span class="font-mono text-xs break-all">{{ setup_run.new_public_key }}</span>.
+      </p>
+    </div>
+    <form method="post"
+          action="{% url 'panel:setup_configure' %}"
+          class="space-y-6">
+      {% csrf_token %}
+      <input type="hidden" name="stage" value="review">
+      {% for error in configuration_form.non_field_errors %}
+        <p class="alert alert-danger" role="alert">{{ error }}</p>
+      {% endfor %}
+      <div class="max-w-md">
+        {% include "panel/includes/form_field.html" with field=configuration_form.node_name help_text="1 to 31 bytes; none of [ ] \ : , ? *" %}
+      </div>
+      {% if setup_run.purpose == "reconfigure" %}
+        <fieldset class="space-y-4">
+          <legend class="section-title">Identity</legend>
+          {% if situation.node_holds_restored_identity %}
+            <div class="alert alert-information" role="status">
+              {% heroicon_outline "finger-print" class="size-5 shrink-0" %}
+              <p>
+                The node already holds the relay's identity (<span class="font-mono text-xs break-all">{{ setup_run.restored_public_key }}</span>) from an earlier attempt, so setup goes on with it and users need to do nothing. Only another factory reset gives the relay a new identity: to get one, cancel the setup and start again.
+              </p>
+            </div>
+          {% elif configuration_form.offers_identity_restore %}
+            {% include "panel/includes/form_field.html" with field=configuration_form.restore_identity help_text="Ticked, the node gets the relay's key back from the encrypted backup, so users need to do nothing. Unticked, the node keeps the new key from the reset and every user must add the new contact card." %}
+          {% elif configured_identity_backup.backup_state.status == "unreadable" %}
+            <div class="alert alert-warning" role="status">
+              {% heroicon_outline "exclamation-triangle" class="size-5 shrink-0" %}
+              <p>
+                The relay's identity cannot be kept. {{ configured_identity_backup.backup_state.unreadable_reason }} The node keeps its new identity, and every user must add the new contact card.
+              </p>
+            </div>
+          {% else %}
+            <p class="help-text">
+              No backup of the relay's identity is stored, so the node keeps its new identity and every user must add the new contact card.
+            </p>
+          {% endif %}
+        </fieldset>
+      {% endif %}
+      {% include "panel/setup/radio_fields.html" %}
+      <fieldset class="space-y-4">
+        <legend class="section-title">Transmitter and channels</legend>
+        <div class="max-w-xs">
+          {% include "panel/includes/form_field.html" with field=configuration_form.transmit_power_dbm help_text=transmit_power_help %}
+        </div>
+        {% include "panel/includes/form_field.html" with field=configuration_form.replace_public_channel help_text="Off by default: the node gives channel traffic up before direct messages, so the Public channel never costs the relay a message." %}
+      </fieldset>
+      {% include "panel/setup/fixed_values.html" %}
+      <div class="flex flex-wrap gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+        <button type="submit" class="button button-primary">
+          Review
+          {% heroicon_mini "arrow-right" class="size-4" %}
+        </button>
+        <button type="button"
+                class="button button-secondary"
+                commandfor="cancel-configuration-dialog"
+                command="show-modal">Cancel setup…</button>
+      </div>
+    </form>
+  </div>
+</section>
+<dialog id="cancel-configuration-dialog"
+        class="dialog"
+        aria-labelledby="cancel-configuration-dialog-title">
+  <form method="post" action="{% url 'panel:setup_cancel' %}">
+    {% csrf_token %}
+    <div class="dialog-body">
+      <h2 id="cancel-configuration-dialog-title" class="text-lg font-semibold">Cancel setup?</h2>
+      <p class="text-sm text-slate-700 dark:text-slate-300">
+        {% if setup_run.restored_public_key %}
+          The node has already been factory reset, and an earlier attempt began giving it the relay's identity back. It has none of the relay's settings and no contacts. If you cancel, the relay stays stopped until a setup run is completed, even while the node holds the relay's identity: the banner will show that the node needs setup, or an identity mismatch.
+        {% else %}
+          The node has already been factory reset. It has a new identity and no contacts. If you cancel, the relay stays stopped (the banner will show an identity mismatch, or that setup is required) until a setup run is completed.
+        {% endif %}
+      </p>
+    </div>
+    <div class="dialog-actions">
+      <button type="button"
+              class="button button-secondary"
+              commandfor="cancel-configuration-dialog"
+              command="close">Continue setup</button>
+      <button type="submit" class="button button-danger">Cancel setup</button>
+    </div>
+  </form>
+</dialog>

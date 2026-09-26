@@ -1,0 +1,69 @@
+{% load heroicons %}
+<section class="card" aria-labelledby="current-node-title">
+  <div class="card-header">
+    <h2 id="current-node-title" class="card-title">
+      {% heroicon_outline "cpu-chip" class="size-5 text-slate-500" %}
+      The node attached now
+    </h2>
+  </div>
+  <div class="card-body space-y-5">
+    {% if node_information %}
+      {% include "panel/includes/node_information.html" %}
+    {% else %}
+      <p class="text-sm text-red-700 dark:text-red-300">
+        The node information cannot be shown: {{ situation.node_information_error }}
+      </p>
+    {% endif %}
+    <div class="flex flex-wrap gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+      <button type="button"
+              class="button button-danger"
+              commandfor="factory-reset-dialog"
+              command="show-modal">
+        {% heroicon_outline "exclamation-triangle" class="size-4" %}
+        Factory reset…
+      </button>
+      {% include "panel/setup/cancel_button.html" %}
+    </div>
+  </div>
+</section>
+<dialog id="factory-reset-dialog"
+        class="dialog"
+        aria-labelledby="factory-reset-dialog-title">
+  <form method="post" action="{% url 'panel:setup_reset' %}">
+    {% csrf_token %}
+    <div class="dialog-body">
+      <h2 id="factory-reset-dialog-title" class="text-lg font-semibold">Factory reset the node?</h2>
+      <ul class="list-disc space-y-1 pl-5 text-sm text-slate-700 dark:text-slate-300">
+        <li>The node's identity is replaced by a new key.</li>
+        <li>Its name, radio settings, contacts, channels and every other setting are erased.</li>
+        <li>It adds contacts automatically until setup configures it.</li>
+        {% if configured_identity_backup.is_restorable %}
+          <li>The relay's identity is backed up: keep it in the configuration step, and users need to do nothing.</li>
+        {% else %}
+          <li>
+            <strong>Every user must add the server's new contact card</strong> before they can use the relay again.
+          </li>
+        {% endif %}
+      </ul>
+      <div class="space-y-1">
+        <label for="typed-confirmation" class="label">
+          Type <span class="font-mono font-semibold">{{ expected_confirmation }}</span> to confirm
+        </label>
+        <input type="text"
+               id="typed-confirmation"
+               name="{{ reset_form.typed_confirmation.html_name }}"
+               class="input"
+               autocomplete="off"
+               required
+               data-confirmation-text="{{ expected_confirmation }}">
+      </div>
+    </div>
+    <div class="dialog-actions">
+      <button type="button"
+              class="button button-secondary"
+              commandfor="factory-reset-dialog"
+              command="close">Keep the node as it is</button>
+      <button type="submit" class="button button-danger" data-confirmation-submit>Factory reset</button>
+    </div>
+  </form>
+</dialog>

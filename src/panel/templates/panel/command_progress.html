@@ -1,0 +1,17 @@
+{% load heroicons %}
+<div id="command-progress-{{ node_command.pk }}" class="space-y-3 rounded-lg border border-slate-200 p-4 dark:border-slate-800" {% if node_command.state == "pending" or node_command.state == "running" %}hx-get="{% url 'panel:command_progress' node_command.pk %}{% if refresh_page_when_finished %}?refresh_page_when_finished=1{% endif %}" hx-trigger="every 1s" hx-swap="outerHTML"{% endif %}>
+  <div class="flex flex-wrap items-center justify-between gap-2">
+    <p class="text-sm font-medium">{{ node_command.get_kind_display }}</p>
+    {% include "panel/includes/state_badge.html" with state=node_command.state %}
+  </div>
+  {% if node_command.state == "pending" %}
+    <p class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+      {% heroicon_outline "clock" class="size-4" %}
+      Waiting for the relay worker, until {{ node_command.expires_at|time:"H:i:s" }}.
+    </p>
+  {% endif %}
+  {% if displayed_steps %}
+    {% include "panel/includes/progress_steps.html" %}
+  {% endif %}
+  {% if node_command.error_message %}<p class="text-sm text-red-700 dark:text-red-300">{{ node_command.error_message }}</p>{% endif %}
+</div>

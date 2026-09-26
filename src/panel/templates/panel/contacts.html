@@ -1,0 +1,412 @@
+{% extends "panel/base.html" %}
+{% load heroicons panel_formatting %}
+{% block title %}Contacts · HopTalk Relay{% endblock title %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Contacts</h1>
+      <p class="page-description">
+        The nodes the relay node holds. The list here is the truth; the relay worker keeps the node in step with it.
+      </p>
+    </div>
+  </div>
+  <div class="space-y-6">
+    <section class="card" aria-labelledby="server-card-title">
+      <div class="card-header">
+        <h2 id="server-card-title" class="card-title">
+          {% heroicon_outline "qr-code" class="size-5 text-slate-500" %}
+          The relay's contact card
+        </h2>
+        {% if node_configuration %}
+          <form method="post"
+                action="{% url 'panel:node_regenerate_card' %}"
+                class="flex flex-wrap items-center justify-end gap-2">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{% url 'panel:contacts' %}">
+            {% if not node_action_availability.relay_actions_are_available %}
+              <span id="regenerate-card-unavailable-reason"
+                    class="text-xs text-slate-500 dark:text-slate-400">{{ node_action_availability.relay_action_unavailable_reason }}</span>
+            {% endif %}
+            <button type="submit"
+                    class="button button-secondary button-small"
+                    {% if not node_action_availability.relay_actions_are_available %}disabled aria-describedby="regenerate-card-unavailable-reason"{% endif %}>
+              {% heroicon_outline "arrow-path" class="size-4" %}
+              Regenerate card
+            </button>
+          </form>
+        {% endif %}
+      </div>
+      <div class="card-body space-y-4">
+        {% if node_configuration %}
+          <p class="text-sm text-slate-600 dark:text-slate-300">
+            A new user scans or pastes this card in their MeshCore app to add the relay, then registers from the HopTalk app.
+          </p>
+          {% include "panel/includes/contact_card.html" with card_uri=node_configuration.node_contact_card_uri public_key=node_configuration.node_public_key card_element_id="server-contact-card" %}
+        {% else %}
+          <div class="empty-state">
+            {% heroicon_outline "wrench-screwdriver" class="size-8" %}
+            <p>The node has not been set up yet, so it has no card to share.</p>
+            <a href="{% url 'panel:setup' %}"
+               class="button button-primary button-small">Start setup</a>
+          </div>
+        {% endif %}
+      </div>
+    </section>
+    <section class="card" aria-labelledby="contact-list-title">
+      <div class="card-header">
+        <h2 id="contact-list-title" class="card-title">
+          {% heroicon_outline "identification" class="size-5 text-slate-500" %}
+          Contacts on the node
+        </h2>
+      </div>
+      {% partialdef contact_list inline %}
+        <div id="contact-list"
+             hx-get="{% url 'panel:contact_list' %}"
+             hx-trigger="contacts-changed from:body{% if has_pending_contacts %}, every 5s{% endif %}"
+             hx-swap="outerHTML">
+          <p class="px-4 pt-3 text-xs text-slate-500 sm:px-5 dark:text-slate-400">
+            {{ contact_count }} of {{ contact_capacity }} places used.
+          </p>
+          {% if contacts %}
+            <div class="relative overflow-x-auto">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Name</th>
+                    <th scope="col">Key</th>
+                    <th scope="col">Source</th>
+                    <th scope="col">User</th>
+                    <th scope="col">On the node</th>
+                    <th scope="col">Last heard</th>
+                    <th scope="col">Route</th>
+                    <th scope="col">Added</th>
+                    <th scope="col">
+                      <span class="sr-only">Actions</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for contact in contacts %}
+                    <tr>
+                      <td class="font-medium text-slate-900 dark:text-white">
+                        {{ contact.name|default:"(no name)" }}
+                        {% if contact.node_name and contact.node_name != contact.name %}
+                          <span class="block text-xs font-normal text-slate-500 dark:text-slate-400">on the node: {{ contact.node_name }}</span>
+                        {% endif %}
+                      </td>
+                      <td>
+                        <details>
+                          <summary class="cursor-pointer font-mono text-xs">{{ contact.public_key|key_prefix }}</summary>
+                          <p class="monospace-text mt-1 w-64">{{ contact.public_key }}</p>
+                        </details>
+                      </td>
+                      <td>{{ contact.get_source_display }}</td>
+                      <td>
+                        {% if contact.user %}
+                          <a href="{% url 'panel:users' %}#user-{{ contact.user.pk }}"
+                             class="text-link">@{{ contact.user.username }}</a>
+                        {% else %}
+                          <span class="text-slate-500 dark:text-slate-400">not registered</span>
+                        {% endif %}
+                      </td>
+                      <td>{% include "panel/includes/sync_state_badge.html" %}</td>
+                      <td class="whitespace-nowrap">
+                        {% if contact.last_heard_at %}
+                          <time datetime="{{ contact.last_heard_at|date:'c' }}"
+                                title="{{ contact.last_heard_at }}">{{ contact.last_heard_at|timesince }} ago</time>
+                        {% else %}
+                          never
+                        {% endif %}
+                      </td>
+                      <td class="whitespace-nowrap">{{ contact.node_out_path_length|contact_route }}</td>
+                      <td class="whitespace-nowrap">{{ contact.added_at|date:"j M Y" }}</td>
+                      <td class="text-right">
+                        {% url 'panel:contacts' as contacts_url %}
+                        {% include "panel/includes/contact_delete_dialog.html" with next_url=contacts_url %}
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <div class="empty-state">
+              {% heroicon_outline "identification" class="size-8" %}
+              <p>No contacts yet. Add one by its card or by pairing below.</p>
+            </div>
+          {% endif %}
+        </div>
+      {% endpartialdef %}
+    </section>
+    <div class="grid gap-6 lg:grid-cols-2">
+      <section class="card" aria-labelledby="add-card-title">
+        <div class="card-header">
+          <h2 id="add-card-title" class="card-title">
+            {% heroicon_outline "document-plus" class="size-5 text-slate-500" %}
+            Add by contact card
+          </h2>
+        </div>
+        <div class="card-body space-y-4">
+          <form method="post"
+                action="{% url 'panel:contact_card_preview' %}"
+                hx-post="{% url 'panel:contact_card_preview' %}"
+                hx-target="#card-preview"
+                hx-swap="innerHTML"
+                hx-disabled-elt="find button[type=submit]"
+                class="space-y-3">
+            {% csrf_token %}
+            {% include "panel/includes/form_field.html" with field=card_form.card_uri help_text="The user copies it from their MeshCore app: Share contact, then Copy." %}
+            <button type="submit" class="button button-secondary">
+              {% heroicon_outline "magnifying-glass" class="size-4" %}
+              Check card
+            </button>
+          </form>
+          <div id="card-preview" aria-live="polite">
+            {% if card_preview %}
+              {% partial card_preview %}
+            {% endif %}
+          </div>
+        </div>
+      </section>
+      <section id="pairing" class="card" aria-labelledby="pairing-title">
+        <div class="card-header">
+          <h2 id="pairing-title" class="card-title">
+            {% heroicon_outline "signal" class="size-5 text-slate-500" %}
+            Pairing
+          </h2>
+        </div>
+        <div class="card-body space-y-4">
+          <p class="text-sm text-slate-600 dark:text-slate-300">
+            The relay advertises itself for a while, and the nodes it hears meanwhile appear below. Ask the new user to send an advert from their app.
+          </p>
+          {% if pairing_area.failed_start_command %}
+            <div class="alert alert-danger" role="alert">
+              {% heroicon_outline "exclamation-triangle" class="size-5 shrink-0" %}
+              <p>
+                Pairing did not start ({{ pairing_area.failed_start_command.get_state_display|lower }}). {{ pairing_area.failed_start_command.error_message }}
+              </p>
+            </div>
+          {% endif %}
+          {# Outside the polled panel, so that a poll does not wipe the notice. mb-0 keeps the empty region from adding a gap; the notice brings its own. #}
+          {% partialdef pairing_notice inline %}
+            <div id="pairing-notice"
+                 class="mb-0"
+                 {% if notice_is_out_of_band %}hx-swap-oob="innerHTML"{% endif %}
+                 aria-live="polite">
+              {% if pairing_notice %}
+                <p class="alert alert-{{ notice_tone }} mb-4" role="status">{{ pairing_notice }}</p>
+              {% endif %}
+            </div>
+          {% endpartialdef %}
+          {% if pairing_area.starting_command %}
+            {% include "panel/command_progress.html" with node_command=pairing_area.starting_command displayed_steps=pairing_area.starting_command_steps refresh_page_when_finished=True %}
+          {% elif not pairing_area.is_active %}
+            <form method="post"
+                  action="{% url 'panel:pairing_start' %}"
+                  class="space-y-4">
+              {% csrf_token %}
+              <div class="grid gap-4 sm:grid-cols-2">
+                {% include "panel/includes/form_field.html" with field=pairing_start_form.duration_seconds %}
+                {% include "panel/includes/form_field.html" with field=pairing_start_form.advert_interval_seconds %}
+              </div>
+              {% include "panel/includes/form_field.html" with field=pairing_start_form.advert_flood help_text="Off: only nodes in direct radio range hear the adverts. Flood reaches further but costs airtime across the mesh." %}
+              <div class="flex flex-wrap items-center gap-3">
+                <button type="submit"
+                        class="button button-primary"
+                        {% if not node_action_availability.relay_actions_are_available %}disabled aria-describedby="pairing-unavailable-reason"{% endif %}>
+                  {% heroicon_outline "play" class="size-4" %}
+                  Start pairing
+                </button>
+                {% if not node_action_availability.relay_actions_are_available %}
+                  <p id="pairing-unavailable-reason"
+                     class="text-sm text-slate-600 dark:text-slate-400">
+                    {{ node_action_availability.relay_action_unavailable_reason }}
+                  </p>
+                {% endif %}
+              </div>
+            </form>
+          {% endif %}
+          {% if pairing_area.pairing_session %}
+            {% partialdef pairing_panel inline %}
+              {# Buttons in this polled region carry ids: htmx gives the focus back only to an element with an id. #}
+              {% with pairing_session=pairing_area.pairing_session %}
+                <div id="pairing-panel"
+                     class="space-y-4"
+                     {% if pairing_area.is_active %}hx-get="{% url 'panel:pairing_panel' pairing_session.pk %}" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+                  {% if pairing_area.is_active %}
+                    <div class="space-y-3 rounded-lg bg-sky-50 p-4 dark:bg-sky-950/40"
+                         data-ends-at="{{ pairing_session.ends_at|date:'c' }}"
+                         data-server-now="{{ pairing_area.server_now|date:'c' }}">
+                      <div class="flex flex-wrap items-center justify-between gap-3">
+                        <p class="text-sm text-sky-900 dark:text-sky-100">
+                          <span class="text-2xl font-semibold tabular-nums"
+                                data-countdown-text>{{ pairing_area.remaining_seconds|minutes_and_seconds }}</span>
+                          left · {{ pairing_session.adverts_sent }} advert{{ pairing_session.adverts_sent|pluralize }} sent, one every {{ pairing_session.advert_interval_seconds }} s,
+                          {% if pairing_session.advert_flood %}
+                            flood
+                          {% else %}
+                            zero-hop
+                          {% endif %}
+                        </p>
+                        <form method="post"
+                              action="{% url 'panel:pairing_stop' pairing_session.pk %}"
+                              hx-post="{% url 'panel:pairing_stop' pairing_session.pk %}"
+                              hx-target="#pairing-panel"
+                              hx-swap="outerHTML"
+                              hx-disabled-elt="find button">
+                          {% csrf_token %}
+                          <button type="submit"
+                                  id="pairing-stop-button"
+                                  class="button button-secondary button-small">
+                            {% heroicon_outline "stop" class="size-4" %}
+                            Stop
+                          </button>
+                        </form>
+                      </div>
+                      <progress class="h-2 w-full accent-sky-600"
+                                max="{{ pairing_area.duration_seconds }}"
+                                value="{{ pairing_area.remaining_seconds }}"
+                                aria-label="Time left"></progress>
+                    </div>
+                  {% else %}
+                    <p class="text-sm text-slate-600 dark:text-slate-300">
+                      The pairing session {{ pairing_session.get_state_display|lower }} at {{ pairing_session.finished_at|default:pairing_session.ends_at|time:"H:i" }}.
+                      {% if pairing_area.adding_allowed_until %}Heard nodes can be added until {{ pairing_area.adding_allowed_until|time:"H:i" }}.{% endif %}
+                    </p>
+                  {% endif %}
+                  <h3 class="text-sm font-semibold">Heard nodes</h3>
+                  {% if pairing_area.heard_adverts %}
+                    <ul class="divide-y divide-slate-100 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
+                      {% for displayed_advert in pairing_area.heard_adverts %}
+                        {% with heard_advert=displayed_advert.heard_advert %}
+                          <li class="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-start">
+                            <div class="min-w-0 flex-1 space-y-1">
+                              <p class="text-sm font-medium">
+                                {{ heard_advert.name|default:"(no name)" }}
+                                <span class="badge badge-neutral ml-1">{{ displayed_advert.node_type_description }}</span>
+                              </p>
+                              <p class="monospace-text">{{ heard_advert.public_key }}</p>
+                              <p class="text-xs text-slate-500 dark:text-slate-400">
+                                First heard {{ heard_advert.first_heard_at|time:"H:i:s" }} · last {{ heard_advert.last_heard_at|time:"H:i:s" }} · {{ heard_advert.heard_count }} time{{ heard_advert.heard_count|pluralize }}
+                              </p>
+                            </div>
+                            <div class="shrink-0">
+                              {% if displayed_advert.can_be_added %}
+                                <button type="button"
+                                        id="add-advert-button-{{ heard_advert.pk }}"
+                                        class="button button-primary button-small"
+                                        commandfor="add-advert-{{ heard_advert.pk }}"
+                                        command="show-modal">
+                                  {% heroicon_mini "plus" class="size-4" %}
+                                  <span class="sr-only">Add {{ heard_advert.name|default:heard_advert.public_key }}</span>
+                                </button>
+                                <dialog id="add-advert-{{ heard_advert.pk }}"
+                                        class="dialog"
+                                        aria-labelledby="add-advert-{{ heard_advert.pk }}-title">
+                                  <form method="post"
+                                        action="{% url 'panel:pairing_add_advert' pairing_session.pk heard_advert.pk %}"
+                                        hx-post="{% url 'panel:pairing_add_advert' pairing_session.pk heard_advert.pk %}"
+                                        hx-target="#pairing-panel"
+                                        hx-swap="outerHTML"
+                                        hx-disabled-elt="find button[type=submit]">
+                                    {% csrf_token %}
+                                    <div class="dialog-body">
+                                      <h2 id="add-advert-{{ heard_advert.pk }}-title"
+                                          class="text-lg font-semibold">Do you really want to add this contact?</h2>
+                                      <dl class="description-list">
+                                        <dt>Name</dt>
+                                        <dd>
+                                          {{ heard_advert.name|default:"(no name)" }}
+                                        </dd>
+                                        <dt>Public key</dt>
+                                        <dd class="monospace-text">
+                                          {{ heard_advert.public_key }}
+                                        </dd>
+                                        <dt>Type</dt>
+                                        <dd>
+                                          {{ displayed_advert.node_type_description }}
+                                        </dd>
+                                      </dl>
+                                    </div>
+                                    <div class="dialog-actions">
+                                      <button type="button"
+                                              class="button button-secondary"
+                                              commandfor="add-advert-{{ heard_advert.pk }}"
+                                              command="close">Cancel</button>
+                                      <button type="submit" class="button button-primary">Yes, add</button>
+                                    </div>
+                                  </form>
+                                </dialog>
+                              {% elif displayed_advert.was_added_from_this_advert %}
+                                <span class="badge badge-success">Added</span>
+                              {% else %}
+                                <span class="text-xs text-slate-500 dark:text-slate-400">{{ displayed_advert.reason_it_cannot_be_added }}</span>
+                              {% endif %}
+                            </div>
+                          </li>
+                        {% endwith %}
+                      {% endfor %}
+                    </ul>
+                  {% else %}
+                    <p class="text-sm text-slate-500 dark:text-slate-400">No node has been heard yet.</p>
+                  {% endif %}
+                </div>
+              {% endwith %}
+            {% endpartialdef %}
+          {% endif %}
+        </div>
+      </section>
+    </div>
+  </div>
+  {% partialdef card_preview %}
+    {% if card_preview.error_message %}
+      <div class="alert alert-danger" role="alert">
+        {% heroicon_outline "x-circle" class="size-5 shrink-0" %}
+        <p>{{ card_preview.error_message }}</p>
+      </div>
+    {% else %}
+      {% with contact_card=card_preview.contact_card check=card_preview.contact_addition_check %}
+        <div class="space-y-4 rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+          <div class="flex flex-wrap items-center gap-2">
+            <p class="text-base font-semibold">{{ contact_card.name|default:"(no name)" }}</p>
+            <span class="badge badge-success">
+              {% heroicon_mini "check" class="size-3" %}
+              signature valid
+            </span>
+          </div>
+          <dl class="description-list">
+            <dt>Public key</dt>
+            <dd class="monospace-text">
+              {{ contact_card.public_key }}
+            </dd>
+            <dt>Type</dt>
+            <dd>
+              {{ card_preview.node_type_description }}
+            </dd>
+            <dt>Advert time</dt>
+            <dd>
+              {{ card_preview.advert_time|date:"j M Y, H:i" }}
+            </dd>
+          </dl>
+          {% if check.is_allowed %}
+            <form method="post" action="{% url 'panel:contact_card_add' %}">
+              {% csrf_token %}
+              <input type="hidden" name="card_uri" value="{{ contact_card.card_uri }}">
+              <button type="submit" class="button button-primary">
+                {% heroicon_outline "plus" class="size-4" %}
+                Add contact
+              </button>
+            </form>
+          {% else %}
+            <div class="alert alert-danger" role="alert">
+              {% heroicon_outline "no-symbol" class="size-5 shrink-0" %}
+              <ul class="space-y-1">
+                {% for problem_description in check.describe_problems %}<li>{{ problem_description }}</li>{% endfor %}
+              </ul>
+            </div>
+          {% endif %}
+        </div>
+      {% endwith %}
+    {% endif %}
+  {% endpartialdef %}
+{% endblock content %}

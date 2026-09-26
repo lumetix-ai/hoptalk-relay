@@ -1,0 +1,22 @@
+{% load heroicons %}
+<section class="card" aria-labelledby="start-title">
+  <div class="card-header">
+    <h2 id="start-title" class="card-title">
+      {% heroicon_outline "wrench-screwdriver" class="size-5 text-slate-500" %}
+      Set up the relay node
+    </h2>
+  </div>
+  <div class="card-body space-y-4">
+    <p class="text-sm text-slate-600 dark:text-slate-300">
+      The node attached to the server is read first and nothing changes until you confirm the factory reset. After the reset the node has a new identity, and every user adds the relay's new contact card.
+    </p>
+    {% include "panel/setup/worker_state.html" %}
+    <form method="post" action="{% url 'panel:setup_start' %}">
+      {% csrf_token %}
+      <button type="submit" class="button button-primary">
+        {% heroicon_outline "play" class="size-4" %}
+        Start setup
+      </button>
+    </form>
+  </div>
+</section>

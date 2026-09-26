@@ -1,0 +1,19 @@
+{% load heroicons %}
+{% if banners %}
+  <ul class="mt-4 space-y-2">
+    {% for banner in banners %}
+      <li class="alert alert-{{ banner.tone }}"
+          {% if banner.tone == "danger" %}role="alert"{% endif %}>
+        {% heroicon_outline banner.icon_name class="mt-0.5 size-5 shrink-0" %}
+        <div class="min-w-0 flex-1">
+          <p class="font-semibold">{{ banner.title }}</p>
+          <p class="mt-0.5 break-words">{{ banner.detail }}</p>
+        </div>
+        {% if banner.link_url %}
+          <a href="{{ banner.link_url }}"
+             class="shrink-0 self-center font-semibold whitespace-nowrap underline underline-offset-2">{{ banner.link_label }}</a>
+        {% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+{% endif %}

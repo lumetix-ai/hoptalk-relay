@@ -1,0 +1,210 @@
+name: CI
+on:
+    push:
+    pull_request:
+
+permissions:
+    contents: read
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+defaults:
+    run:
+        working-directory: src
+
+env:
+    TERM: xterm-256color
+
+jobs:
+    claude-config:
+        name: claude
+        runs-on: ubuntu-24.04
+        timeout-minutes: 10
+        steps:
+            -   name: Checkout repository
+                uses: actions/checkout@v7
+
+            -   name: Install agnix
+                run: ../scripts/install-agnix.sh
+
+            -   name: Check the .claude configuration
+                run: make check-claude
+
+    dockerfile:
+        name: dockerfile
+        runs-on: ubuntu-24.04
+        timeout-minutes: 10
+        steps:
+            -   name: Checkout repository
+                uses: actions/checkout@v7
+
+            -   name: Lint the application Dockerfile
+                run: make check-dockerfile
+
+    coding-standards:
+        runs-on: ubuntu-24.04
+        timeout-minutes: 30
+        strategy:
+            fail-fast: false
+            matrix:
+                actions:
+                    - { name: lock, run: make check-lock }
+                    - { name: security, run: make check-security }
+                    - { name: style, run: make check-style }
+                    - { name: templates, run: make check-templates }
+                    - { name: types, run: make check-types }
+                    - { name: tests, run: make check-tests }
+
+        name: ${{ matrix.actions.name }}
+
+        services:
+            database:
+                image: postgres:18.6-trixie
+                env:
+                    POSTGRES_DB: hoptalk_relay
+                    POSTGRES_USER: hoptalk_relay
+                    POSTGRES_PASSWORD: continuous-integration
+                ports:
+                    -   5432:5432
+                options: >-
+                    --health-cmd "pg_isready --host=127.0.0.1 --username=hoptalk_relay --dbname=hoptalk_relay"
+                    --health-interval 5s
+                    --health-timeout 3s
+                    --health-retries 30
+
+        # The settings refuse to load without the values src/.env provides; a real environment
+        # variable takes the place of the file here.
+        env:
+            POSTGRES_HOST: 127.0.0.1
+            POSTGRES_PORT: "5432"
+            POSTGRES_DB: hoptalk_relay
+            POSTGRES_USER: hoptalk_relay
+            POSTGRES_PASSWORD: continuous-integration
+            SECRET_KEY: continuous-integration-only-secret-key-that-is-long-enough-000000
+            ADMIN_USERNAME: continuous-integration
+            ADMIN_PASSWORD_HASH: argon2$argon2id$v=19$m=102400,t=2,p=8$eTA5UHVBZTRkRmVoSVlUV0c0Q1ZIWQ$SvbmdQQyV5ibpyM6KINR2nJkNRoMUtLGq5gGkPEYLRQ
+
+        steps:
+            -   name: Checkout repository
+                uses: actions/checkout@v7
+
+            -   name: Set up uv and Python
+                uses: astral-sh/setup-uv@v6
+                with:
+                    version: "0.12.19"
+                    python-version: "3.14.7"
+
+            -   name: Install the locked dependencies
+                run: |
+                    uv sync --locked
+                    echo "${PWD}/.venv/bin" >> "${GITHUB_PATH}"
+
+            -   name: Check ${{ matrix.actions.name }}
+                # The container is not built for these: they need Python and PostgreSQL and
+                # nothing else, and the runner has both.
+                env:
+                    executor: host
+                run: ${{ matrix.actions.run }}
+                shell: bash
+
+    image:
+        name: image
+        runs-on: ubuntu-24.04
+        timeout-minutes: 30
+        steps:
+            -   name: Checkout repository
+                uses: actions/checkout@v7
+
+            -   name: Set up Docker Buildx
+                uses: docker/setup-buildx-action@v3
+
+            # The image runs as its build-time APP_UID, and it reads a certificate this
+            # job issues as the runner's own account. Building with anything else leaves
+            # a key nginx cannot open, which is also how the deployment builds it.
+            -   name: Take the account the image will run as
+                run: |
+                    echo "APP_UID=$(id -u)" >> "${GITHUB_ENV}"
+                    echo "APP_GID=$(id -g)" >> "${GITHUB_ENV}"
+
+            -   name: Build the production image
+                uses: docker/build-push-action@v6
+                with:
+                    context: .
+                    file: ./docker/images/app/Dockerfile
+                    target: app-production
+                    load: true
+                    tags: hoptalk-relay-app:ci
+                    cache-from: type=gha
+                    cache-to: type=gha,mode=max
+                    build-args: |
+                        APP_UID=${{ env.APP_UID }}
+                        APP_GID=${{ env.APP_GID }}
+
+            -   name: Assert the nginx configuration is valid
+                working-directory: .
+                run: docker run --rm --entrypoint nginx hoptalk-relay-app:ci -t
+
+            # The page is worth nothing if the browser cannot fetch what it points at, and a
+            # stylesheet that silently 404s still returns a 200 for the page itself. Every
+            # reference the sign-in page makes is followed here, and one that leaves the
+            # server fails the job: the panel must work off-grid.
+            -   name: Assert the page and everything it references are served
+                working-directory: .
+                run: |
+                    ./scripts/generate-tls-certificate.sh 127.0.0.1
+
+                    docker network create hoptalk-relay-ci
+                    docker run --detach --name hoptalk-relay-ci-database --network hoptalk-relay-ci \
+                        --network-alias database \
+                        --env POSTGRES_DB=hoptalk_relay \
+                        --env POSTGRES_USER=hoptalk_relay \
+                        --env POSTGRES_PASSWORD=continuous-integration \
+                        postgres:18.6-trixie
+
+                    container=$(docker run --detach --network hoptalk-relay-ci \
+                        --env APP_ROLE=web \
+                        --env HTTPS_PORT=8443 \
+                        --env SERVER_ADDRESS=127.0.0.1 \
+                        --env POSTGRES_HOST=database \
+                        --env POSTGRES_PASSWORD=continuous-integration \
+                        --env SECRET_KEY=continuous-integration-only-secret-key-that-is-long-enough-000000 \
+                        --env ADMIN_USERNAME=continuous-integration \
+                        --env ADMIN_PASSWORD_HASH='argon2$argon2id$v=19$m=102400,t=2,p=8$eTA5UHVBZTRkRmVoSVlUV0c0Q1ZIWQ$SvbmdQQyV5ibpyM6KINR2nJkNRoMUtLGq5gGkPEYLRQ' \
+                        --volume "${GITHUB_WORKSPACE}/var/tls":/etc/nginx/tls:ro \
+                        --publish 8443:8443 \
+                        hoptalk-relay-app:ci)
+
+                    # Waiting out the full timeout on a container that has already given up
+                    # buries the reason under two minutes of silence.
+                    for _ in $(seq 1 40); do
+                        state=$(docker inspect --format '{{ .State.Status }}/{{ .State.Health.Status }}' "${container}")
+                        [ "${state}" = 'running/healthy' ] && break
+                        [ "${state%%/*}" = 'running' ] || break
+                        sleep 3
+                    done
+
+                    docker logs "${container}"
+                    [ "$(docker inspect --format '{{ .State.Health.Status }}' "${container}")" = 'healthy' ]
+
+                    page=$(curl --silent --insecure https://127.0.0.1:8443/login)
+                    echo "${page}" | grep --quiet 'Sign in'
+
+                    if echo "${page}" | grep --extended-regexp '(src|href|action)="(https?:)?//'; then
+                        echo 'The sign-in page references another server.'
+                        exit 1
+                    fi
+
+                    echo "${page}" \
+                        | grep --only-matching --extended-regexp '(src|href)="/[^"]*"' \
+                        | sed 's/.*="//;s/"$//' \
+                        | sort --unique \
+                        | while read -r reference; do
+                            status=$(curl --silent --insecure --output /dev/null --write-out '%{http_code}' "https://127.0.0.1:8443${reference}")
+                            echo "${status}  ${reference}"
+                            [ "${status}" = '200' ]
+                        done
+
+                    docker rm --force "${container}" hoptalk-relay-ci-database
+                    docker network rm hoptalk-relay-ci

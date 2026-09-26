@@ -1,0 +1,6 @@
+<form method="post" action="{% url 'panel:setup_cancel' %}">
+  {% csrf_token %}
+  <button type="submit"
+          id="cancel-setup-button"
+          class="button button-secondary">Cancel setup</button>
+</form>

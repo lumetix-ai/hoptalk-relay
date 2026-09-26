@@ -1,0 +1,53 @@
+{% load heroicons %}
+<section class="card" aria-labelledby="reading-title">
+  <div class="card-header">
+    <h2 id="reading-title" class="card-title">
+      {% heroicon_outline "magnifying-glass" class="size-5 text-slate-500" %}
+      {% if situation.is_waiting_for_the_worker %}
+        Waiting for the relay worker and the node
+      {% else %}
+        Reading the node
+      {% endif %}
+    </h2>
+  </div>
+  <div class="card-body space-y-4">
+    {% if situation.read_has_failed %}
+      <div class="alert alert-danger" role="alert">
+        {% heroicon_outline "exclamation-triangle" class="size-5 shrink-0" %}
+        <p>{{ setup_run.last_error|default:"Reading the node did not succeed." }}</p>
+      </div>
+      {% include "panel/setup/worker_state.html" %}
+    {% elif situation.is_waiting_for_the_worker %}
+      {% include "panel/setup/worker_state.html" %}
+      <p class="text-sm text-slate-600 dark:text-slate-300">
+        The node is read as soon as the worker is connected to it. This page updates by itself.
+      </p>
+    {% else %}
+      {% if setup_run.last_error %}
+        <div class="alert alert-warning" role="status">
+          {% heroicon_outline "exclamation-triangle" class="size-5 shrink-0" %}
+          <p>{{ setup_run.last_error }}</p>
+        </div>
+      {% endif %}
+      <p class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+        {% heroicon_outline "arrow-path" class="size-5 animate-spin text-sky-600 motion-reduce:animate-none" %}
+        The relay worker is reading the node's identity, radio and settings.
+      </p>
+      {% if situation.displayed_steps %}
+        {% include "panel/includes/progress_steps.html" with displayed_steps=situation.displayed_steps %}
+      {% endif %}
+    {% endif %}
+    <div class="flex flex-wrap gap-2">
+      {% if situation.read_has_failed %}
+        <form method="post" action="{% url 'panel:setup_retry' %}">
+          {% csrf_token %}
+          <button type="submit" class="button button-primary">
+            {% heroicon_outline "arrow-path" class="size-4" %}
+            Retry
+          </button>
+        </form>
+      {% endif %}
+      {% include "panel/setup/cancel_button.html" %}
+    </div>
+  </div>
+</section>

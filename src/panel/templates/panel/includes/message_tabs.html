@@ -1,0 +1,24 @@
+{% load heroicons %}
+<nav class="mb-6 border-b border-slate-200 dark:border-slate-800"
+     aria-label="Message views">
+  <div class="-mb-px flex gap-4 overflow-x-auto sm:gap-6 [scrollbar-width:none]">
+    <a href="{% url 'panel:messages' %}"
+       class="tab-link {% if active_tab == 'messages' %}tab-link-active{% endif %}"
+       {% if active_tab == 'messages' %}aria-current="page"{% endif %}>
+      {% heroicon_outline "chat-bubble-left-right" class="hidden size-5 sm:block" %}
+      Messages
+    </a>
+    <a href="{% url 'panel:traffic' %}"
+       class="tab-link {% if active_tab == 'traffic' %}tab-link-active{% endif %}"
+       {% if active_tab == 'traffic' %}aria-current="page"{% endif %}>
+      {% heroicon_outline "arrows-right-left" class="hidden size-5 sm:block" %}
+      Traffic
+    </a>
+    <a href="{% url 'panel:refresh_sessions' %}"
+       class="tab-link {% if active_tab == 'refresh_sessions' %}tab-link-active{% endif %}"
+       {% if active_tab == 'refresh_sessions' %}aria-current="page"{% endif %}>
+      {% heroicon_outline "arrow-path" class="hidden size-5 sm:block" %}
+      Refresh sessions
+    </a>
+  </div>
+</nav>

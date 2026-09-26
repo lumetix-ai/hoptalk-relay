@@ -1,2 +1,0 @@
-# Official MeshCore companion-protocol client (pulls in pyserial + bleak).
-meshcore>=2.3.14,<3

@@ -1,0 +1,219 @@
+/* Automatic source detection is off: only the paths below are scanned for class names. */
+@import "tailwindcss" source(none);
+@source "../panel/templates";
+/* Classes set in Python code, such as form widget attributes. */
+@source "../panel/**/*.py";
+@source "./scripts/*.js";
+
+/* htmx is configured not to inject these styles itself (includeIndicatorStyles: false),
+   because the content security policy allows no inline style. */
+.htmx-indicator {
+    opacity: 0;
+}
+
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator {
+    opacity: 1;
+    transition: opacity 200ms ease-in;
+}
+
+/* The building blocks every page shares, so that spacing, colours and dark mode stay consistent. */
+@layer components {
+    .page-header {
+        @apply mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between;
+    }
+
+    .page-title {
+        @apply text-2xl font-semibold tracking-tight text-slate-900 dark:text-white;
+    }
+
+    .page-description {
+        @apply mt-1 max-w-3xl text-sm text-slate-600 dark:text-slate-400;
+    }
+
+    .section-title {
+        @apply text-base font-semibold text-slate-900 dark:text-white;
+    }
+
+    /* min-w-0: inside a grid, a wide table must scroll within its card instead of widening the page. */
+    .card {
+        @apply min-w-0 rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900;
+    }
+
+    .card-header {
+        @apply flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 sm:px-5 dark:border-slate-800;
+    }
+
+    .card-title {
+        @apply flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white;
+    }
+
+    .card-body {
+        @apply px-4 py-4 sm:px-5;
+    }
+
+    .button {
+        @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium whitespace-nowrap shadow-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+    }
+
+    .button-primary {
+        @apply bg-emerald-600 text-white hover:bg-emerald-700 focus-visible:outline-emerald-600 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400;
+    }
+
+    .button-secondary {
+        @apply bg-white text-slate-700 ring-1 ring-slate-300 ring-inset hover:bg-slate-50 focus-visible:outline-slate-500 dark:bg-slate-800 dark:text-slate-200 dark:ring-slate-700 dark:hover:bg-slate-700;
+    }
+
+    .button-danger {
+        @apply bg-red-600 text-white hover:bg-red-700 focus-visible:outline-red-600 dark:bg-red-500 dark:hover:bg-red-400;
+    }
+
+    .button-small {
+        @apply gap-1.5 px-2.5 py-1.5 text-xs;
+    }
+
+    .icon-button {
+        @apply inline-flex items-center justify-center rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-slate-500 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white;
+    }
+
+    .text-link {
+        @apply font-medium text-emerald-700 underline-offset-2 hover:underline dark:text-emerald-400;
+    }
+
+    .label {
+        @apply block text-sm font-medium text-slate-700 dark:text-slate-300;
+    }
+
+    .input {
+        @apply block w-full rounded-lg border-0 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm ring-1 ring-slate-300 ring-inset placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-600 focus:outline-none dark:bg-slate-950 dark:text-slate-100 dark:ring-slate-700;
+    }
+
+    /* The attribute rather than :read-only, which every <select> matches as well. */
+    .input[readonly] {
+        @apply bg-slate-50 text-slate-600 dark:bg-slate-900 dark:text-slate-400;
+    }
+
+    .checkbox {
+        @apply size-4 rounded border-slate-300 accent-emerald-600;
+    }
+
+    .help-text {
+        @apply mt-1 text-xs text-slate-500 dark:text-slate-400;
+    }
+
+    .field-error {
+        @apply mt-1 text-sm text-red-600 dark:text-red-400;
+    }
+
+    .badge {
+        @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ring-1 ring-inset;
+    }
+
+    .badge-success {
+        @apply bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-400 dark:ring-emerald-500/30;
+    }
+
+    .badge-warning {
+        @apply bg-amber-50 text-amber-800 ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/30;
+    }
+
+    .badge-danger {
+        @apply bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-500/10 dark:text-red-400 dark:ring-red-500/30;
+    }
+
+    .badge-information {
+        @apply bg-sky-50 text-sky-700 ring-sky-600/20 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/30;
+    }
+
+    .badge-neutral {
+        @apply bg-slate-50 text-slate-600 ring-slate-500/20 dark:bg-slate-400/10 dark:text-slate-300 dark:ring-slate-400/20;
+    }
+
+    .alert {
+        @apply flex gap-3 rounded-lg border px-4 py-3 text-sm;
+    }
+
+    .alert-danger {
+        @apply border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200;
+    }
+
+    .alert-warning {
+        @apply border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-100;
+    }
+
+    .alert-information {
+        @apply border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900 dark:bg-sky-950/50 dark:text-sky-100;
+    }
+
+    .alert-success {
+        @apply border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-100;
+    }
+
+    .data-table {
+        @apply w-full text-left text-sm;
+    }
+
+    .data-table th {
+        @apply px-3 py-2 text-xs font-semibold tracking-wide whitespace-nowrap text-slate-500 uppercase first:pl-4 last:pr-4 sm:first:pl-5 sm:last:pr-5 dark:text-slate-400;
+    }
+
+    .data-table td {
+        @apply px-3 py-2.5 align-top text-slate-700 first:pl-4 last:pr-4 sm:first:pl-5 sm:last:pr-5 dark:text-slate-300;
+    }
+
+    .data-table tbody tr {
+        @apply border-t border-slate-100 dark:border-slate-800;
+    }
+
+    .description-list {
+        @apply grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-[minmax(0,12rem)_1fr];
+    }
+
+    .description-list dt {
+        @apply text-slate-500 dark:text-slate-400;
+    }
+
+    .description-list dd {
+        @apply min-w-0 text-slate-900 dark:text-slate-100;
+    }
+
+    .monospace-text {
+        @apply font-mono text-xs break-all text-slate-800 dark:text-slate-200;
+    }
+
+    .statistic-value {
+        @apply text-2xl font-semibold text-slate-900 tabular-nums dark:text-white;
+    }
+
+    .statistic-label {
+        @apply text-xs text-slate-500 dark:text-slate-400;
+    }
+
+    .dialog {
+        @apply m-auto w-[calc(100%-2rem)] max-w-lg rounded-xl border border-slate-200 bg-white p-0 text-slate-900 shadow-xl backdrop:bg-slate-950/60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100;
+    }
+
+    .dialog-body {
+        @apply space-y-4 px-5 py-5;
+    }
+
+    .dialog-actions {
+        @apply flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3 sm:flex-row sm:justify-end dark:border-slate-800 dark:bg-slate-950/40;
+    }
+
+    .tab-link {
+        @apply inline-flex items-center gap-2 border-b-2 border-transparent px-1 py-3 text-sm font-medium whitespace-nowrap text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200;
+    }
+
+    .tab-link-active {
+        @apply border-emerald-600 text-emerald-700 hover:border-emerald-600 hover:text-emerald-700 dark:border-emerald-400 dark:text-emerald-400;
+    }
+
+    .empty-state {
+        @apply flex flex-col items-center gap-2 px-4 py-10 text-center text-sm text-slate-500 dark:text-slate-400;
+    }
+
+    .step-marker {
+        @apply flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold;
+    }
+}

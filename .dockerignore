@@ -1,0 +1,19 @@
+**/.git
+**/.gitignore
+**/node_modules
+**/__pycache__
+**/.venv
+**/.mypy_cache
+**/.pytest_cache
+**/.ruff_cache
+.claude/
+.github/
+.idea/
+docs/
+var/
+src/bin/agnix
+src/.env
+src/.env.*
+# The Tailwind output of a development machine. The assets stage builds its own, so a
+# stale copy on the host can never end up in the production image.
+src/build

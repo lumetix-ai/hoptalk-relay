@@ -1,0 +1,33 @@
+x-serial-node-connection: &serial-node-connection
+    MESHCORE_TRANSPORT: serial
+    # A stable udev symlink. The worker opens it afresh on every reconnect, so whichever
+    # ttyACM minor the node comes back with after a reboot is picked up.
+    MESHCORE_SERIAL_DEVICE: ${MESHCORE_SERIAL_DEVICE:-/dev/meshcore-node}
+
+services:
+
+    # The connection settings only, for verify_configuration; the app never opens the node.
+    app:
+        environment:
+            <<: *serial-node-connection
+
+    relay:
+        environment:
+            <<: *serial-node-connection
+        volumes:
+            # The host's live /dev rather than a "devices" entry, which is resolved once at
+            # container start and breaks when the node re-enumerates.
+            -   /dev:/dev
+        tmpfs:
+            # The /dev bind brings the host's pty and shared-memory mounts along, and Docker's
+            # default device rules already allow ptys: the worker, running as the operator's
+            # account, could otherwise open the operator's terminals. Empty private mounts,
+            # which Docker places over the bind, hide both.
+            -   /dev/pts
+            -   /dev/shm
+        device_cgroup_rules:
+            # USB CDC-ACM ttys are character major 166; this adds them to Docker's default rules.
+            -   "c 166:* rmw"
+        group_add:
+            # The host group that owns /dev/ttyACM* ("dialout" is 20 on Debian and Ubuntu).
+            -   "${SERIAL_DEVICE_GID:-20}"

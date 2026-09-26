@@ -1,0 +1,124 @@
+{% extends "panel/base.html" %}
+{% load heroicons panel_formatting %}
+{% block title %}Traffic · HopTalk Relay{% endblock title %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Messages</h1>
+      <p class="page-description">
+        Every direct message the relay received or sent, merged by time and decoded with the worker's own parser. Sign-in passwords are never stored.
+      </p>
+    </div>
+  </div>
+  {% include "panel/includes/message_tabs.html" with active_tab="traffic" %}
+  <form method="get"
+        action="{% url 'panel:traffic' %}"
+        hx-get="{% url 'panel:traffic' %}"
+        hx-trigger="change, submit"
+        hx-target="#traffic-rows"
+        hx-swap="outerHTML"
+        hx-push-url="true"
+        class="card card-body mb-4 flex flex-wrap items-end gap-4">
+    <div class="w-full sm:w-56">{% include "panel/includes/form_field.html" with field=traffic_filter_form.contact %}</div>
+    <div class="w-full sm:w-44">
+      {% include "panel/includes/form_field.html" with field=traffic_filter_form.direction %}
+    </div>
+    <div class="w-full sm:w-56">
+      {% include "panel/includes/form_field.html" with field=traffic_filter_form.classification %}
+    </div>
+    <div class="pb-2">{% include "panel/includes/form_field.html" with field=traffic_filter_form.only_problems %}</div>
+    <div class="pb-2">{% include "panel/includes/form_field.html" with field=traffic_filter_form.live %}</div>
+    <button type="submit" class="button button-secondary">
+      {% heroicon_outline "funnel" class="size-4" %}
+      Filter
+    </button>
+  </form>
+  {% partialdef traffic_rows inline %}
+    <div id="traffic-rows"
+         class="card"
+         {% if is_live %}hx-get="{% url 'panel:traffic_rows' %}?{{ rows_query }}" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
+      {% if traffic_rows %}
+        <ul class="divide-y divide-slate-100 dark:divide-slate-800">
+          {% for traffic_row in traffic_rows %}
+            <li class="flex gap-3 px-4 py-3 sm:px-5">
+              {% if traffic_row.is_inbound %}
+                <span class="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"
+                      title="Received">
+                  {% heroicon_mini "arrow-down-left" class="size-4" %}
+                  <span class="sr-only">Received</span>
+                </span>
+              {% else %}
+                <span class="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300"
+                      title="Sent">
+                  {% heroicon_mini "arrow-up-right" class="size-4" %}
+                  <span class="sr-only">Sent</span>
+                </span>
+              {% endif %}
+              <div class="min-w-0 flex-1 space-y-1">
+                <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <time class="text-xs text-slate-500 tabular-nums dark:text-slate-400"
+                        datetime="{{ traffic_row.occurred_at|date:'c' }}">{{ traffic_row.occurred_at|date:"j M, H:i:s" }}</time>
+                  <span class="text-sm font-medium">{{ traffic_row.contact_label|default:"unknown sender" }}</span>
+                  <span class="text-sm text-slate-600 dark:text-slate-300">{{ traffic_row.decoded_meaning }}</span>
+                </div>
+                <p class="rounded bg-slate-50 px-2 py-1 font-mono text-xs whitespace-pre-wrap wrap-anywhere text-slate-800 dark:bg-slate-950 dark:text-slate-200">{{ traffic_row.text }}</p>
+                <div class="flex flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                  {% if traffic_row.is_inbound %}
+                    {% with inbound_message=traffic_row.inbound_direct_message %}
+                      <span>{{ inbound_message.path_length|inbound_route }}</span>
+                      {% if inbound_message.signal_to_noise_ratio is not None %}
+                        <span>· SNR {{ inbound_message.signal_to_noise_ratio|floatformat:1 }} dB</span>
+                      {% endif %}
+                      {% if inbound_message.duplicate_count %}
+                        <span class="badge badge-neutral">× {{ inbound_message.duplicate_count }} firmware repeat{{ inbound_message.duplicate_count|pluralize }}</span>
+                      {% endif %}
+                      {% include "panel/includes/state_badge.html" with state=inbound_message.classification %}
+                      {% include "panel/includes/state_badge.html" with state=inbound_message.processing_state %}
+                      {% if inbound_message.route_reset_performed %}<span class="badge badge-information">route reset before reply</span>{% endif %}
+                      {% if inbound_message.outcome_summary %}<span>· {{ inbound_message.outcome_summary }}</span>{% endif %}
+                      {% if inbound_message.reply_summary %}
+                        <span>· replied <span class="font-mono">{{ inbound_message.reply_summary }}</span></span>
+                      {% endif %}
+                      {% if inbound_message.processing_error %}
+                        <span class="text-red-700 dark:text-red-300">· {{ inbound_message.processing_error }}</span>
+                      {% endif %}
+                    {% endwith %}
+                  {% else %}
+                    {% with outbound_packet=traffic_row.outbound_packet %}
+                      <span class="badge badge-neutral">{{ outbound_packet.get_purpose_display|lower }}</span>
+                      {% include "panel/includes/state_badge.html" with state=outbound_packet.state %}
+                      {% if outbound_packet.route %}<span>{{ outbound_packet.route }}</span>{% endif %}
+                      {% if outbound_packet.round_trip_milliseconds is not None %}
+                        <span>· firmware ACK after {{ outbound_packet.round_trip_milliseconds }} ms</span>
+                      {% endif %}
+                      {% if outbound_packet.node_error_code is not None %}
+                        <span class="text-red-700 dark:text-red-300">· node error {{ outbound_packet.node_error_code }}</span>
+                      {% endif %}
+                      {% if outbound_packet.route_reset_state != "not_applicable" %}
+                        <span>· route reset: {{ outbound_packet.get_route_reset_state_display|lower }}</span>
+                      {% endif %}
+                    {% endwith %}
+                  {% endif %}
+                </div>
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+        <div class="flex items-center gap-3 border-t border-slate-200 px-4 py-3 text-sm sm:px-5 dark:border-slate-800">
+          {% if not is_first_page %}
+            <a href="{% url 'panel:traffic' %}?{{ filter_query }}" class="text-link">Newest</a>
+          {% endif %}
+          {% if older_rows_before %}
+            <a href="{% url 'panel:traffic' %}?{{ filter_query }}{% if filter_query %}&{% endif %}before={{ older_rows_before|urlencode }}"
+               class="text-link ml-auto">Older</a>
+          {% endif %}
+        </div>
+      {% else %}
+        <div class="empty-state">
+          {% heroicon_outline "arrows-right-left" class="size-8" %}
+          <p>No traffic matches.</p>
+        </div>
+      {% endif %}
+    </div>
+  {% endpartialdef %}
+{% endblock content %}

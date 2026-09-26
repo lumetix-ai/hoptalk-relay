@@ -1,0 +1,36 @@
+{% load heroicons %}
+<ol class="space-y-3" aria-label="Progress">
+  {% for displayed_step in displayed_steps %}
+    <li class="flex items-start gap-3">
+      {% if displayed_step.state == "done" %}
+        {% heroicon_solid "check-circle" class="size-5 shrink-0 text-emerald-600 dark:text-emerald-400" %}
+      {% elif displayed_step.state == "running" %}
+        {% heroicon_outline "arrow-path" class="size-5 shrink-0 animate-spin text-sky-600 motion-reduce:animate-none dark:text-sky-400" %}
+      {% elif displayed_step.state == "failed" %}
+        {% heroicon_solid "x-circle" class="size-5 shrink-0 text-red-600 dark:text-red-400" %}
+      {% elif displayed_step.state == "skipped" %}
+        {% heroicon_solid "minus-circle" class="size-5 shrink-0 text-slate-400" %}
+      {% else %}
+        <span class="m-0.5 size-4 shrink-0 rounded-full border-2 border-slate-300 dark:border-slate-600"></span>
+      {% endif %}
+      <div class="min-w-0 flex-1">
+        <p class="text-sm font-medium {% if displayed_step.state == 'waiting' %}text-slate-500 dark:text-slate-400{% else %}text-slate-900 dark:text-slate-100{% endif %}">
+          <span class="sr-only">{{ displayed_step.state }}:</span>
+          {{ displayed_step.label }}
+        </p>
+        {% if displayed_step.detail %}
+          <p class="mt-0.5 text-xs break-words text-slate-600 dark:text-slate-400">{{ displayed_step.detail }}</p>
+        {% endif %}
+      </div>
+      {% if displayed_step.at %}
+        <time class="shrink-0 text-xs text-slate-500 tabular-nums dark:text-slate-400"
+              datetime="{{ displayed_step.at|date:'c' }}">{{ displayed_step.at|time:"H:i:s" }}</time>
+      {% endif %}
+    </li>
+  {% empty %}
+    <li class="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
+      {% heroicon_outline "clock" class="size-5 shrink-0" %}
+      Waiting for the relay worker to start.
+    </li>
+  {% endfor %}
+</ol>

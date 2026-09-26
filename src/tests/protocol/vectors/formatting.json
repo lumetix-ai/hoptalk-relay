@@ -1,0 +1,730 @@
+{
+  "description": "Message fields and the exact direct message text they format to, with its UTF-8 byte count, including the worst case of every type. A case with error invalid_direct_message must be refused: its fields break the grammar or a value rule, or the text would exceed 150 bytes.",
+  "generated_by": "src/tests/protocol/shared_vectors.py; do not edit by hand, regenerate with: make --directory=src container-execute command=\"python -m tests.protocol.shared_vectors\"",
+  "field_notes": "Field names are those of the server's message types. message_id is a string of decimal digits, because a 16-digit id can exceed 2^53, the largest integer that many JSON decoders keep exactly; every other number is a JSON number.",
+  "cases": [
+    {
+      "description": "A: register or sign in, with spaces inside the password",
+      "message_type": "A",
+      "fields": {
+        "username": "ivan",
+        "password": "correct horse battery"
+      },
+      "text": "HT1 A ivan correct horse battery",
+      "utf8_byte_length": 32
+    },
+    {
+      "description": "A, worst case: a 16-character username and a 64-byte password",
+      "message_type": "A",
+      "fields": {
+        "username": "KonstantinIvanov",
+        "password": "correct horse battery staple, correct horse battery staple, abcd"
+      },
+      "text": "HT1 A KonstantinIvanov correct horse battery staple, correct horse battery staple, abcd",
+      "utf8_byte_length": 87
+    },
+    {
+      "description": "A, worst case with 32 Cyrillic letters, the longest Cyrillic password (64 bytes)",
+      "message_type": "A",
+      "fields": {
+        "username": "KonstantinIvanov",
+        "password": "парольпарольпарольпарольпарольда"
+      },
+      "text": "HT1 A KonstantinIvanov парольпарольпарольпарольпарольда",
+      "utf8_byte_length": 87
+    },
+    {
+      "description": "Q: does this user exist?",
+      "message_type": "Q",
+      "fields": {
+        "username": "bob"
+      },
+      "text": "HT1 Q bob",
+      "utf8_byte_length": 9
+    },
+    {
+      "description": "Q, worst case",
+      "message_type": "Q",
+      "fields": {
+        "username": "KonstantinIvanov"
+      },
+      "text": "HT1 Q KonstantinIvanov",
+      "utf8_byte_length": 22
+    },
+    {
+      "description": "M: one part of a message with Cyrillic text",
+      "message_type": "M",
+      "fields": {
+        "recipient_username": "Bob",
+        "message_id": "1790294400123456",
+        "part_number": 1,
+        "part_count": 1,
+        "part_text": "Привет, Боб!"
+      },
+      "text": "HT1 M Bob 1790294400123456 1/1 Привет, Боб!",
+      "utf8_byte_length": 52
+    },
+    {
+      "description": "M, worst case: 46-byte header (16-character username, 16-digit id, 10/10) and 104 bytes of text",
+      "message_type": "M",
+      "fields": {
+        "recipient_username": "KonstantinIvanov",
+        "message_id": "9999999999999999",
+        "part_number": 10,
+        "part_count": 10,
+        "part_text": "The longest part text is 104 bytes of UTF-8, whatever the two usernames are, so any M part fits as an m."
+      },
+      "text": "HT1 M KonstantinIvanov 9999999999999999 10/10 The longest part text is 104 bytes of UTF-8, whatever the two usernames are, so any M part fits as an m.",
+      "utf8_byte_length": 150
+    },
+    {
+      "description": "M, worst case with 52 Cyrillic letters (104 bytes)",
+      "message_type": "M",
+      "fields": {
+        "recipient_username": "KonstantinIvanov",
+        "message_id": "9999999999999999",
+        "part_number": 10,
+        "part_count": 10,
+        "part_text": "ЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯ"
+      },
+      "text": "HT1 M KonstantinIvanov 9999999999999999 10/10 ЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯЯ",
+      "utf8_byte_length": 150
+    },
+    {
+      "description": "M: the part text keeps its trailing space verbatim",
+      "message_type": "M",
+      "fields": {
+        "recipient_username": "bob",
+        "message_id": "2",
+        "part_number": 1,
+        "part_count": 2,
+        "part_text": "Hello "
+      },
+      "text": "HT1 M bob 2 1/2 Hello ",
+      "utf8_byte_length": 22
+    },
+    {
+      "description": "K: delivery acknowledgement of a single-part message",
+      "message_type": "K",
+      "fields": {
+        "sender_username": "ivan",
+        "message_id": "1790294400123456",
+        "received_set": "1"
+      },
+      "text": "HT1 K ivan 1790294400123456 1",
+      "utf8_byte_length": 29
+    },
+    {
+      "description": "K, worst case: a 10-part received-set",
+      "message_type": "K",
+      "fields": {
+        "sender_username": "KonstantinIvanov",
+        "message_id": "9999999999999999",
+        "received_set": "1111111111"
+      },
+      "text": "HT1 K KonstantinIvanov 9999999999999999 1111111111",
+      "utf8_byte_length": 50
+    },
+    {
+      "description": "R: I have read this message",
+      "message_type": "R",
+      "fields": {
+        "sender_username": "ivan",
+        "message_id": "1790294400123456"
+      },
+      "text": "HT1 R ivan 1790294400123456",
+      "utf8_byte_length": 27
+    },
+    {
+      "description": "R, worst case",
+      "message_type": "R",
+      "fields": {
+        "sender_username": "KonstantinIvanov",
+        "message_id": "9999999999999999"
+      },
+      "text": "HT1 R KonstantinIvanov 9999999999999999",
+      "utf8_byte_length": 39
+    },
+    {
+      "description": "C: receipt acknowledgement of a delivered receipt",
+      "message_type": "C",
+      "fields": {
+        "recipient_username": "Bob",
+        "message_id": "1790294400123456",
+        "receipt_level": "D"
+      },
+      "text": "HT1 C Bob 1790294400123456 D",
+      "utf8_byte_length": 28
+    },
+    {
+      "description": "C, worst case",
+      "message_type": "C",
+      "fields": {
+        "recipient_username": "KonstantinIvanov",
+        "message_id": "9999999999999999",
+        "receipt_level": "R"
+      },
+      "text": "HT1 C KonstantinIvanov 9999999999999999 R",
+      "utf8_byte_length": 41
+    },
+    {
+      "description": "F: refresh one conversation",
+      "message_type": "F",
+      "fields": {
+        "refresh_target": "ivan"
+      },
+      "text": "HT1 F ivan",
+      "utf8_byte_length": 10
+    },
+    {
+      "description": "F *: refresh every conversation",
+      "message_type": "F",
+      "fields": {
+        "refresh_target": "*"
+      },
+      "text": "HT1 F *",
+      "utf8_byte_length": 7
+    },
+    {
+      "description": "F, worst case",
+      "message_type": "F",
+      "fields": {
+        "refresh_target": "KonstantinIvanov"
+      },
+      "text": "HT1 F KonstantinIvanov",
+      "utf8_byte_length": 22
+    },
+    {
+      "description": "a: signed in",
+      "message_type": "a",
+      "fields": {
+        "username": "ivan"
+      },
+      "text": "HT1 a ivan",
+      "utf8_byte_length": 10
+    },
+    {
+      "description": "a, worst case",
+      "message_type": "a",
+      "fields": {
+        "username": "KonstantinIvanov"
+      },
+      "text": "HT1 a KonstantinIvanov",
+      "utf8_byte_length": 22
+    },
+    {
+      "description": "q: the user exists",
+      "message_type": "q",
+      "fields": {
+        "username": "Bob",
+        "user_exists": true
+      },
+      "text": "HT1 q Bob 1",
+      "utf8_byte_length": 11
+    },
+    {
+      "description": "q: the user does not exist",
+      "message_type": "q",
+      "fields": {
+        "username": "carol",
+        "user_exists": false
+      },
+      "text": "HT1 q carol 0",
+      "utf8_byte_length": 13
+    },
+    {
+      "description": "q, worst case",
+      "message_type": "q",
+      "fields": {
+        "username": "KonstantinIvanov",
+        "user_exists": true
+      },
+      "text": "HT1 q KonstantinIvanov 1",
+      "utf8_byte_length": 24
+    },
+    {
+      "description": "k: the server holds the whole single-part message",
+      "message_type": "k",
+      "fields": {
+        "recipient_username": "Bob",
+        "message_id": "1790294400123456",
+        "received_set": "1"
+      },
+      "text": "HT1 k Bob 1790294400123456 1",
+      "utf8_byte_length": 28
+    },
+    {
+      "description": "k: the server lacks part 2 of 3",
+      "message_type": "k",
+      "fields": {
+        "recipient_username": "Bob",
+        "message_id": "1790294400123457",
+        "received_set": "101"
+      },
+      "text": "HT1 k Bob 1790294400123457 101",
+      "utf8_byte_length": 30
+    },
+    {
+      "description": "k, worst case",
+      "message_type": "k",
+      "fields": {
+        "recipient_username": "KonstantinIvanov",
+        "message_id": "9999999999999999",
+        "received_set": "1111111111"
+      },
+      "text": "HT1 k KonstantinIvanov 9999999999999999 1111111111",
+      "utf8_byte_length": 50
+    },
+    {
+      "description": "m: one part of a delivered message, the sender's bytes unchanged",
+      "message_type": "m",
+      "fields": {
+        "sender_username": "ivan",
+        "message_id": "1790294400123456",
+        "part_number": 1,
+        "part_count": 1,
+        "part_text": "Привет, Боб!"
+      },
+      "text": "HT1 m ivan 1790294400123456 1/1 Привет, Боб!",
+      "utf8_byte_length": 53
+    },
+    {
+      "description": "m, worst case: 46-byte header and 104 bytes of text",
+      "message_type": "m",
+      "fields": {
+        "sender_username": "AlexandraPetrova",
+        "message_id": "9999999999999999",
+        "part_number": 10,
+        "part_count": 10,
+        "part_text": "The longest part text is 104 bytes of UTF-8, whatever the two usernames are, so any M part fits as an m."
+      },
+      "text": "HT1 m AlexandraPetrova 9999999999999999 10/10 The longest part text is 104 bytes of UTF-8, whatever the two usernames are, so any M part fits as an m.",
+      "utf8_byte_length": 150
+    },
+    {
+      "description": "m, worst case with 26 four-byte emoji (104 bytes)",
+      "message_type": "m",
+      "fields": {
+        "sender_username": "AlexandraPetrova",
+        "message_id": "9999999999999999",
+        "part_number": 10,
+        "part_count": 10,
+        "part_text": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+      },
+      "text": "HT1 m AlexandraPetrova 9999999999999999 10/10 😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+      "utf8_byte_length": 150
+    },
+    {
+      "description": "m: tabs, line feeds and leading and trailing spaces are forwarded verbatim",
+      "message_type": "m",
+      "fields": {
+        "sender_username": "alice",
+        "message_id": "2",
+        "part_number": 2,
+        "part_count": 2,
+        "part_text": " line one\n\tline two "
+      },
+      "text": "HT1 m alice 2 2/2  line one\n\tline two ",
+      "utf8_byte_length": 38
+    },
+    {
+      "description": "r: read accepted",
+      "message_type": "r",
+      "fields": {
+        "sender_username": "ivan",
+        "message_id": "1790294400123456"
+      },
+      "text": "HT1 r ivan 1790294400123456",
+      "utf8_byte_length": 27
+    },
+    {
+      "description": "r, worst case",
+      "message_type": "r",
+      "fields": {
+        "sender_username": "KonstantinIvanov",
+        "message_id": "9999999999999999"
+      },
+      "text": "HT1 r KonstantinIvanov 9999999999999999",
+      "utf8_byte_length": 39
+    },
+    {
+      "description": "s: read receipt",
+      "message_type": "s",
+      "fields": {
+        "recipient_username": "Bob",
+        "message_id": "1790294400123456",
+        "receipt_level": "R"
+      },
+      "text": "HT1 s Bob 1790294400123456 R",
+      "utf8_byte_length": 28
+    },
+    {
+      "description": "s, worst case",
+      "message_type": "s",
+      "fields": {
+        "recipient_username": "KonstantinIvanov",
+        "message_id": "9999999999999999",
+        "receipt_level": "D"
+      },
+      "text": "HT1 s KonstantinIvanov 9999999999999999 D",
+      "utf8_byte_length": 41
+    },
+    {
+      "description": "f: three missed messages follow",
+      "message_type": "f",
+      "fields": {
+        "refresh_target": "ivan",
+        "message_count": 3
+      },
+      "text": "HT1 f ivan 3",
+      "utf8_byte_length": 12
+    },
+    {
+      "description": "f *: five missed messages follow",
+      "message_type": "f",
+      "fields": {
+        "refresh_target": "*",
+        "message_count": 5
+      },
+      "text": "HT1 f * 5",
+      "utf8_byte_length": 9
+    },
+    {
+      "description": "f *: nothing is missing",
+      "message_type": "f",
+      "fields": {
+        "refresh_target": "*",
+        "message_count": 0
+      },
+      "text": "HT1 f * 0",
+      "utf8_byte_length": 9
+    },
+    {
+      "description": "f, worst case",
+      "message_type": "f",
+      "fields": {
+        "refresh_target": "KonstantinIvanov",
+        "message_count": 9999
+      },
+      "text": "HT1 f KonstantinIvanov 9999",
+      "utf8_byte_length": 27
+    },
+    {
+      "description": "f: a count above 9999 is shown as 9999",
+      "message_type": "f",
+      "fields": {
+        "refresh_target": "*",
+        "message_count": 12345
+      },
+      "text": "HT1 f * 9999",
+      "utf8_byte_length": 12
+    },
+    {
+      "description": "e: the recipient of an M does not exist",
+      "message_type": "e",
+      "fields": {
+        "error_code": "NO_SUCH_USER",
+        "request_type": "M",
+        "error_reference": "carol 1790294400123457"
+      },
+      "text": "HT1 e NO_SUCH_USER M carol 1790294400123457",
+      "utf8_byte_length": 43
+    },
+    {
+      "description": "e, worst case: a 16-letter code and an M reference with a 16-character username and a 16-digit id",
+      "message_type": "e",
+      "fields": {
+        "error_code": "PASSWORD_INVALID",
+        "request_type": "M",
+        "error_reference": "KonstantinIvanov 9999999999999999"
+      },
+      "text": "HT1 e PASSWORD_INVALID M KonstantinIvanov 9999999999999999",
+      "utf8_byte_length": 58
+    },
+    {
+      "description": "e: a password that breaks the password rules",
+      "message_type": "e",
+      "fields": {
+        "error_code": "PASSWORD_INVALID",
+        "request_type": "A",
+        "error_reference": "bob"
+      },
+      "text": "HT1 e PASSWORD_INVALID A bob",
+      "utf8_byte_length": 28
+    },
+    {
+      "description": "e: a syntax error in a text without a type letter has type ? and no reference",
+      "message_type": "e",
+      "fields": {
+        "error_code": "SYNTAX",
+        "request_type": "?",
+        "error_reference": null
+      },
+      "text": "HT1 e SYNTAX ?",
+      "utf8_byte_length": 14
+    },
+    {
+      "description": "e: another protocol version has type ? and the received version as its reference",
+      "message_type": "e",
+      "fields": {
+        "error_code": "VERSION",
+        "request_type": "?",
+        "error_reference": "2"
+      },
+      "text": "HT1 e VERSION ? 2",
+      "utf8_byte_length": 17
+    },
+    {
+      "description": "e: an unknown upper-case letter has that letter as its type and no reference",
+      "message_type": "e",
+      "fields": {
+        "error_code": "UNSUPPORTED",
+        "request_type": "X",
+        "error_reference": null
+      },
+      "text": "HT1 e UNSUPPORTED X",
+      "utf8_byte_length": 19
+    },
+    {
+      "description": "e: a refresh of every conversation from a device that is not signed in",
+      "message_type": "e",
+      "fields": {
+        "error_code": "NOT_SIGNED_IN",
+        "request_type": "F",
+        "error_reference": "*"
+      },
+      "text": "HT1 e NOT_SIGNED_IN F *",
+      "utf8_byte_length": 23
+    },
+    {
+      "description": "m: a 105-byte part text would make a 151-byte direct message",
+      "message_type": "m",
+      "fields": {
+        "sender_username": "AlexandraPetrova",
+        "message_id": "9999999999999999",
+        "part_number": 10,
+        "part_count": 10,
+        "part_text": "The longest part text is 104 bytes of UTF-8, whatever the two usernames are, so any M part fits as an m.."
+      },
+      "error": "invalid_direct_message"
+    },
+    {
+      "description": "M: a part text of 105 bytes is refused even under a short header",
+      "message_type": "M",
+      "fields": {
+        "recipient_username": "Bob",
+        "message_id": "5",
+        "part_number": 1,
+        "part_count": 1,
+        "part_text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "error": "invalid_direct_message"
+    },
+    {
+      "description": "M: NUL in a part text",
+      "message_type": "M",
+      "fields": {
+        "recipient_username": "Bob",
+        "message_id": "5",
+        "part_number": 1,
+        "part_count": 1,
+        "part_text": "a\u0000b"
+      },
+      "error": "invalid_direct_message"
+    },
+    {
+      "description": "M: a carriage return in a part text",
+      "message_type": "M",
+      "fields": {
+        "recipient_username": "Bob",
+        "message_id": "5",
+        "part_number": 1,
+        "part_count": 1,
+        "part_text": "a\rb"
+      },
+      "error": "invalid_direct_message"
+    },
+    {
+      "description": "M: an empty part text",
+      "message_type": "M",
+      "fields": {
+        "recipient_username": "Bob",
+        "message_id": "5",
+        "part_number": 1,
+        "part_count": 1,
+        "part_text": ""
+      },
+      "error": "invalid_direct_message"
+    },
+    {
+      "description": "M: part number above part count",
+      "message_type": "M",
+      "fields": {
+        "recipient_username": "Bob",
+        "message_id": "5",
+        "part_number": 2,
+        "part_count": 1,
+        "part_text": "x"
+      },
+      "error": "invalid_direct_message"
+    },
+    {
+      "description": "m: part count above 10",
+      "message_type": "m",
+      "fields": {
+        "sender_username": "ivan",
+        "message_id": "5",
+        "part_number": 1,
+        "part_count": 11,
+        "part_text": "x"
+      },
+      "error": "invalid_direct_message"
+    },
+    {
+      "description": "a: a two-character username",
+      "message_type": "a",
+      "fields": {
+        "username": "ab"
+      },
+      "error": "invalid_direct_message"
+    },
+    {
+      "description": "a: a 17-character username",
+      "message_type": "a",
+      "fields": {
+        "username": "KonstantinIvanova"
+      },
+      "error": "invalid_direct_message"
+    },
+    {
+      "description": "Q: a username with an underscore",
+      "message_type": "Q",
+      "fields": {
+        "username": "bob_1"
+      },
+      "error": "invalid_direct_message"
+    },
+    {
+      "description": "r: message id 0",
+      "message_type": "r",
+      "fields": {
+        "sender_username": "ivan",
+        "message_id": "0"
+      },
+      "error": "invalid_direct_message"
+    },
+    {
+      "description": "R: a 17-digit message id",
+      "message_type": "R",
+      "fields": {
+        "sender_username": "ivan",
+        "message_id": "10000000000000000"
+      },
+      "error": "invalid_direct_message"
+    },
+    {
+      "description": "k: a received-set with a character other than 0 and 1",
+      "message_type": "k",
+      "fields": {
+        "recipient_username": "Bob",
+        "message_id": "5",
+        "received_set": "12"
+      },
+      "error": "invalid_direct_message"
+    },
+    {
+      "description": "K: an 11-character received-set",
+      "message_type": "K",
+      "fields": {
+        "sender_username": "ivan",
+        "message_id": "5",
+        "received_set": "11111111111"
+      },
+      "error": "invalid_direct_message"
+    },
+    {
+      "description": "K: an empty received-set",
+      "message_type": "K",
+      "fields": {
+        "sender_username": "ivan",
+        "message_id": "5",
+        "received_set": ""
+      },
+      "error": "invalid_direct_message"
+    },
+    {
+      "description": "A: a 7-character password",
+      "message_type": "A",
+      "fields": {
+        "username": "bob",
+        "password": "hunter2"
+      },
+      "error": "invalid_direct_message"
+    },
+    {
+      "description": "A: a password that starts with a space",
+      "message_type": "A",
+      "fields": {
+        "username": "bob",
+        "password": " hunter2222"
+      },
+      "error": "invalid_direct_message"
+    },
+    {
+      "description": "A: a 65-byte password",
+      "message_type": "A",
+      "fields": {
+        "username": "bob",
+        "password": "correct horse battery staple, correct horse battery staple, abcde"
+      },
+      "error": "invalid_direct_message"
+    },
+    {
+      "description": "F: a refresh target that is neither a username nor *",
+      "message_type": "F",
+      "fields": {
+        "refresh_target": "**"
+      },
+      "error": "invalid_direct_message"
+    },
+    {
+      "description": "f: a negative message count",
+      "message_type": "f",
+      "fields": {
+        "refresh_target": "*",
+        "message_count": -1
+      },
+      "error": "invalid_direct_message"
+    },
+    {
+      "description": "e: a lower-case error code",
+      "message_type": "e",
+      "fields": {
+        "error_code": "syntax",
+        "request_type": "A",
+        "error_reference": "bob"
+      },
+      "error": "invalid_direct_message"
+    },
+    {
+      "description": "e: a lower-case request type",
+      "message_type": "e",
+      "fields": {
+        "error_code": "SYNTAX",
+        "request_type": "a",
+        "error_reference": null
+      },
+      "error": "invalid_direct_message"
+    },
+    {
+      "description": "e: a reference with a leading zero in its message id",
+      "message_type": "e",
+      "fields": {
+        "error_code": "ID_CONFLICT",
+        "request_type": "M",
+        "error_reference": "bob 01"
+      },
+      "error": "invalid_direct_message"
+    }
+  ]
+}

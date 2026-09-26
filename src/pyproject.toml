@@ -1,0 +1,100 @@
+[project]
+name = "hoptalk-relay"
+version = "0.1.0"
+description = "HopTalk Relay: the MeshCore direct-message relay server and its admin panel"
+requires-python = "==3.14.*"
+dependencies = [
+    "argon2-cffi~=25.1",
+    "django~=6.1.1",
+    "django-htmx~=1.29",
+    "gunicorn~=26.2",
+    "heroicons[django]~=2.14",
+    "meshcore~=2.3.14",
+    "psycopg[binary,pool]~=3.3.6",
+    "pycryptodome~=3.23",
+    "segno~=1.6.6",
+    "supervisor~=4.3",
+]
+
+[dependency-groups]
+dev = [
+    "django-stubs[compatible-mypy]~=6.1.1",
+    "djlint~=1.46",
+    "mypy~=2.3",
+    "pip-audit~=2.10",
+    "pytest~=9.1",
+    "pytest-asyncio~=1.4",
+    "pytest-django~=4.14",
+    # Grapheme segmentation (\X) for the reference message splitter's tests and the shared
+    # test vectors; the server itself never splits text.
+    "regex>=2026.1",
+    "ruff~=0.16.9",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+extend-exclude = ["*/migrations/*", "build", "node_modules"]
+
+[tool.ruff.lint]
+select = [
+    "ASYNC",
+    "B",
+    "C4",
+    "DJ",
+    "E",
+    "F",
+    "I",
+    "N",
+    "PT",
+    "RUF",
+    "SIM",
+    "T20",
+    "UP",
+    "W",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Django's Meta options (constraints, indexes) are lists by convention, not shared state.
+"*/models.py" = ["RUF012"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["directory", "hoptalk_relay", "messaging", "node", "panel", "protocol", "tests", "worker"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+plugins = ["mypy_django_plugin.main"]
+files = ["."]
+exclude = ['(^|/)migrations/', '^build/', '^node_modules/']
+
+[[tool.mypy.overrides]]
+# Libraries that ship without type information.
+module = ["meshcore", "meshcore.*", "segno", "segno.*", "Crypto", "Crypto.*", "heroicons", "heroicons.*"]
+ignore_missing_imports = true
+
+[tool.django-stubs]
+django_settings_module = "hoptalk_relay.settings"
+
+[tool.djlint]
+profile = "django"
+indent = 2
+max_line_length = 120
+extension = "html"
+extend_exclude = "build,node_modules"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "hoptalk_relay.settings"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "--strict-markers --strict-config"
+filterwarnings = [
+    "error",
+    # meshcore 2.3.14 calls asyncio.iscoroutinefunction(), deprecated in Python 3.14 and
+    # removed in 3.16. The worker installs the same narrow filter (run_relay).
+    "ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning:meshcore",
+]

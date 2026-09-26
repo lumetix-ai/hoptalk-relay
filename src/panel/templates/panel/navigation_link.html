@@ -1,0 +1,9 @@
+{% load heroicons panel_formatting %}
+<li>
+  <a href="{{ link_url }}"
+     class="flex items-center gap-2 rounded-md px-2.5 py-2 whitespace-nowrap sm:px-3 {% if request.path|is_in_section:link_url %}bg-slate-100 font-medium text-slate-900 dark:bg-slate-800 dark:text-white{% else %}text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white{% endif %}"
+     {% if request.path|is_in_section:link_url %}aria-current="page"{% endif %}>
+    {% heroicon_outline icon_name class="hidden size-5 sm:block" %}
+    {{ link_label }}
+  </a>
+</li>

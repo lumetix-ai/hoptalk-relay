@@ -1,0 +1,76 @@
+{% load heroicons panel_formatting %}
+{% if situation.node_configuration %}
+  <div class="alert alert-success" role="status">
+    {% heroicon_outline "check-circle" class="size-5 shrink-0" %}
+    <p>
+      The node is configured{% if situation.completed_run %} since {{ situation.completed_run.finished_at|date:"j M Y, H:i" }}{% endif %}.
+    </p>
+  </div>
+  {% if situation.worker_is_online and situation.worker_status.relay_mode == "identity_mismatch" %}
+    <div class="alert alert-danger" role="alert">
+      {% heroicon_outline "finger-print" class="size-5 shrink-0" %}
+      <div class="flex-1 space-y-2">
+        <p>
+          The node attached now ({{ situation.worker_status.node_name|default:"unnamed" }}, <span class="font-mono text-xs break-all">{{ situation.worker_status.node_public_key }}</span>) is not the configured one. Reconnect the configured node, or set up the attached one.
+          {% if situation.configured_identity_backup.is_restorable %}
+            The relay's identity is backed up: set the attached node up with "Keep the relay's identity" and it takes the relay's place; users need to do nothing.
+          {% endif %}
+        </p>
+        <form method="post" action="{% url 'panel:setup_start' %}">
+          {% csrf_token %}
+          <button type="submit" class="button button-danger button-small">Set up the attached node</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+  {% if situation.worker_is_online and situation.worker_status.relay_mode == "not_configured" %}
+    <div class="alert alert-warning" role="alert">
+      {% heroicon_outline "wrench-screwdriver" class="size-5 shrink-0" %}
+      <div class="flex-1 space-y-2">
+        <p>
+          The attached node holds the relay's identity but was never configured: a setup run was cancelled after it gave the reset node the relay's identity back. The relay does not deliver messages until a setup run is completed; keep the relay's identity in it and users need to do nothing.
+        </p>
+        <form method="post" action="{% url 'panel:setup_start' %}">
+          {% csrf_token %}
+          <button type="submit" class="button button-primary button-small">Set up the node</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+  <section class="card" aria-labelledby="card-title">
+    <div class="card-header">
+      <h2 id="card-title" class="card-title">
+        {% heroicon_outline "qr-code" class="size-5 text-slate-500" %}
+        The relay's contact card
+      </h2>
+    </div>
+    <div class="card-body space-y-4">
+      <p class="text-sm text-slate-700 dark:text-slate-300">
+        {% if situation.completed_run_kept_the_identity %}
+          The relay kept its identity; users need to do nothing. New users add this card to their MeshCore app before they can register.
+        {% else %}
+          Users must add this card to their MeshCore app before they can register.
+          {% if situation.completed_run.purpose == "reconfigure" %}
+            The node has a new identity, so every user adds this new card as well.
+          {% endif %}
+        {% endif %}
+      </p>
+      {% include "panel/includes/contact_card.html" with card_uri=situation.node_configuration.node_contact_card_uri public_key=situation.node_configuration.node_public_key card_element_id="setup-contact-card" %}
+    </div>
+  </section>
+  <a href="{% url 'panel:node_dashboard' %}" class="button button-primary">
+    Go to the dashboard
+    {% heroicon_mini "arrow-right" class="size-4" %}
+  </a>
+{% else %}
+  <div class="alert alert-danger" role="alert">
+    {% heroicon_outline "exclamation-triangle" class="size-5 shrink-0" %}
+    <div class="flex-1 space-y-2">
+      <p>{{ situation.node_configuration_error }}</p>
+      <form method="post" action="{% url 'panel:setup_start' %}">
+        {% csrf_token %}
+        <button type="submit" class="button button-danger button-small">Run setup again</button>
+      </form>
+    </div>
+  </div>
+{% endif %}

@@ -1,0 +1,41 @@
+{% extends "panel/base.html" %}
+{% load heroicons %}
+{% block title %}Sign in · HopTalk Relay{% endblock title %}
+{% block page %}
+  <main class="flex min-h-full items-center justify-center px-4 py-12">
+    <div class="w-full max-w-sm">
+      <div class="mb-8 flex items-center justify-center gap-2 text-xl font-semibold text-slate-900 dark:text-white">
+        {% heroicon_outline "signal" class="size-7 text-emerald-600 dark:text-emerald-400" %}
+        HopTalk Relay
+      </div>
+      <form method="post" class="card space-y-5 p-6">
+        {% csrf_token %}
+        <h1 class="text-lg font-semibold text-slate-900 dark:text-white">Sign in</h1>
+        {% for error in form.non_field_errors %}
+          <p class="alert alert-danger" role="alert">{{ error }}</p>
+        {% endfor %}
+        <div class="space-y-1">
+          <label for="{{ form.username.id_for_label }}" class="label">Username</label>
+          <input type="text"
+                 name="{{ form.username.html_name }}"
+                 id="{{ form.username.id_for_label }}"
+                 value="{{ form.username.value|default_if_none:'' }}"
+                 autocomplete="username"
+                 required
+                 autofocus
+                 class="input">
+        </div>
+        <div class="space-y-1">
+          <label for="{{ form.password.id_for_label }}" class="label">Password</label>
+          <input type="password"
+                 name="{{ form.password.html_name }}"
+                 id="{{ form.password.id_for_label }}"
+                 autocomplete="current-password"
+                 required
+                 class="input">
+        </div>
+        <button type="submit" class="button button-primary w-full">Sign in</button>
+      </form>
+    </div>
+  </main>
+{% endblock page %}

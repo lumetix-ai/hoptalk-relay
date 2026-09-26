@@ -1,0 +1,98 @@
+{% load heroicons panel_formatting %}
+<section class="card" aria-labelledby="review-title">
+  <div class="card-header">
+    <h2 id="review-title" class="card-title">
+      {% heroicon_outline "clipboard-document-check" class="size-5 text-slate-500" %}
+      Review the configuration
+    </h2>
+  </div>
+  <div class="card-body space-y-6">
+    <dl class="description-list">
+      <dt>Name</dt>
+      <dd>
+        {{ reviewed_configuration.node_name }}
+      </dd>
+      <dt>Radio preset</dt>
+      <dd>
+        {% if reviewed_configuration.radio_preset_title == "manual" %}
+          Manual entry
+        {% else %}
+          {{ reviewed_configuration.radio_preset_title }}
+        {% endif %}
+      </dd>
+      <dt>Frequency</dt>
+      <dd>
+        {{ reviewed_configuration.radio_frequency_kilohertz|thousandths }} MHz
+      </dd>
+      <dt>Bandwidth</dt>
+      <dd>
+        {{ reviewed_configuration.radio_bandwidth_hertz|thousandths }} kHz
+      </dd>
+      <dt>Spreading factor</dt>
+      <dd>
+        {{ reviewed_configuration.radio_spreading_factor }}
+      </dd>
+      <dt>Coding rate</dt>
+      <dd>
+        {{ reviewed_configuration.radio_coding_rate }}
+      </dd>
+      <dt>Path hash size</dt>
+      <dd>
+        {{ reviewed_configuration.path_hash_size }} byte{{ reviewed_configuration.path_hash_size|pluralize }}
+      </dd>
+      <dt>Transmit power</dt>
+      <dd>
+        {{ reviewed_configuration.transmit_power_dbm }} dBm
+      </dd>
+      <dt>Public channel</dt>
+      <dd>
+        {% if reviewed_configuration.replace_public_channel %}
+          Replaced with a private channel
+        {% else %}
+          Kept
+        {% endif %}
+      </dd>
+      <dt>Identity</dt>
+      <dd>
+        {% if situation.node_holds_restored_identity %}
+          Kept: the node already holds the relay's key <span class="font-mono text-xs break-all">{{ setup_run.restored_public_key }}</span> from an earlier attempt, so users need to do nothing.
+        {% elif reviewed_configuration.restore_identity %}
+          Kept: the node gets the relay's key <span class="font-mono text-xs break-all">{{ configured_identity_backup.configured_public_key }}</span> back, so users need to do nothing.
+        {% elif setup_run.purpose == "reconfigure" %}
+          New: the node keeps the key <span class="font-mono text-xs break-all">{{ setup_run.new_public_key }}</span> from the reset, and every user must add the new contact card.
+        {% else %}
+          The key from the reset, <span class="font-mono text-xs break-all">{{ setup_run.new_public_key }}</span>.
+        {% endif %}
+      </dd>
+    </dl>
+    {% include "panel/setup/fixed_values.html" %}
+    <p class="text-sm text-slate-600 dark:text-slate-300">
+      Applying {% if reviewed_configuration.restore_identity %}first gives the node the relay's identity back, then{% endif %}
+      sends every value to the node, reboots it, reads every value back and then saves the configuration.
+    </p>
+    <form method="post"
+          action="{% url 'panel:setup_configure' %}"
+          class="flex flex-wrap gap-2">
+      {% csrf_token %}
+      {% for field in configuration_form %}
+        <input type="hidden"
+               name="{{ field.html_name }}"
+               value="{{ field.value|default_if_none:'' }}">
+      {% endfor %}
+      <button type="submit"
+              name="stage"
+              value="apply"
+              class="button button-primary">
+        {% heroicon_outline "bolt" class="size-4" %}
+        Apply and reboot
+      </button>
+      <button type="submit"
+              name="stage"
+              value="edit"
+              class="button button-secondary">
+        {% heroicon_mini "arrow-left" class="size-4" %}
+        Back
+      </button>
+    </form>
+  </div>
+</section>

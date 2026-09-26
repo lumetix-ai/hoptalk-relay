@@ -1,0 +1,23 @@
+{% load panel_formatting %}
+<div class="flex flex-col gap-5 md:flex-row">
+  <div class="mx-auto w-56 shrink-0 rounded-lg bg-white p-3 ring-1 ring-slate-200 md:mx-0 dark:ring-slate-700"
+       role="img"
+       aria-label="QR code of the relay's contact card">{{ card_uri|qr_code_svg }}</div>
+  <div class="min-w-0 flex-1 space-y-4">
+    <div class="space-y-1">
+      <div class="flex items-center justify-between gap-2">
+        <label for="{{ card_element_id }}" class="label">Contact card</label>
+        {% include "panel/includes/copy_button.html" with copy_target=card_element_id copy_label="Copy card" %}
+      </div>
+      <textarea id="{{ card_element_id }}"
+                class="input font-mono text-xs"
+                rows="5"
+                readonly
+                spellcheck="false">{{ card_uri }}</textarea>
+    </div>
+    <div class="space-y-1">
+      <p class="label">Public key</p>
+      <p class="monospace-text">{{ public_key }}</p>
+    </div>
+  </div>
+</div>

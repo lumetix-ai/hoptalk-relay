@@ -1,0 +1,15 @@
+{% load heroicons %}
+<section class="card" aria-labelledby="resetting-title">
+  <div class="card-header">
+    <h2 id="resetting-title" class="card-title">
+      {% heroicon_outline "arrow-path" class="size-5 animate-spin text-sky-600 motion-reduce:animate-none" %}
+      Factory resetting the node
+    </h2>
+  </div>
+  <div class="card-body space-y-4">
+    <p class="text-sm text-slate-600 dark:text-slate-300">
+      The node disconnects, erases itself and comes back with a new identity. This takes up to two minutes; leave it plugged in.
+    </p>
+    {% include "panel/includes/progress_steps.html" with displayed_steps=situation.displayed_steps %}
+  </div>
+</section>

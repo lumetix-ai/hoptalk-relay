@@ -1,0 +1,9 @@
+{% load heroicons %}
+{# The id lets htmx give the focus back to the button after a poll replaces the region around it. #}
+<button type="button"
+        id="{{ copy_target }}-copy-button"
+        class="button button-secondary button-small"
+        data-copy-target="{{ copy_target }}">
+  {% heroicon_outline "clipboard-document" class="size-4" %}
+  <span data-copy-label>{{ copy_label|default:"Copy" }}</span>
+</button>

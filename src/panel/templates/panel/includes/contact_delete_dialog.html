@@ -1,0 +1,33 @@
+{% load heroicons %}
+<button type="button"
+        class="icon-button text-red-600 hover:text-red-700 dark:text-red-400"
+        commandfor="delete-contact-{{ contact.pk }}"
+        command="show-modal"
+        title="Delete {{ contact }}">
+  {% heroicon_outline "trash" class="size-4" %}
+  <span class="sr-only">Delete {{ contact }}</span>
+</button>
+<dialog id="delete-contact-{{ contact.pk }}"
+        class="dialog"
+        aria-labelledby="delete-contact-{{ contact.pk }}-title">
+  <form method="post" action="{% url 'panel:contact_delete' contact.pk %}">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ next_url }}">
+    <div class="dialog-body">
+      <h2 id="delete-contact-{{ contact.pk }}-title"
+          class="text-lg font-semibold">Delete {{ contact.name|default:"this contact" }}?</h2>
+      <div hx-get="{% url 'panel:contact_delete_summary' contact.pk %}"
+           hx-trigger="intersect once"
+           hx-swap="innerHTML">
+        <p class="text-sm text-slate-500 dark:text-slate-400">Counting what goes with it…</p>
+      </div>
+    </div>
+    <div class="dialog-actions">
+      <button type="button"
+              class="button button-secondary"
+              commandfor="delete-contact-{{ contact.pk }}"
+              command="close">Cancel</button>
+      <button type="submit" class="button button-danger">Delete</button>
+    </div>
+  </form>
+</dialog>

@@ -1,0 +1,78 @@
+from django.urls import path
+
+from panel.views import (
+    authentication_views,
+    banner_views,
+    command_views,
+    contact_views,
+    message_views,
+    node_views,
+    pairing_views,
+    setup_views,
+    user_views,
+)
+
+app_name = "panel"
+
+urlpatterns = [
+    path("", setup_views.redirect_from_root, name="root"),
+    path("login", authentication_views.sign_in, name="login"),
+    path("logout", authentication_views.sign_out, name="logout"),
+    path("partials/banners", banner_views.show_banners, name="banners"),
+    path("setup", setup_views.show_setup_wizard, name="setup"),
+    path("setup/start", setup_views.start_setup, name="setup_start"),
+    path("setup/retry", setup_views.retry_reading, name="setup_retry"),
+    path("setup/reset", setup_views.confirm_reset, name="setup_reset"),
+    path("setup/configure", setup_views.configure, name="setup_configure"),
+    path("setup/cancel", setup_views.cancel_setup, name="setup_cancel"),
+    path("setup/partials/step", setup_views.show_setup_step, name="setup_step"),
+    path("setup/partials/radio-fields", setup_views.show_radio_fields, name="setup_radio_fields"),
+    path("node", node_views.show_node_dashboard, name="node_dashboard"),
+    path("node/partials/status", node_views.show_node_status, name="node_status"),
+    path("node/actions/advert", node_views.send_advert, name="node_send_advert"),
+    path("node/actions/reboot", node_views.reboot_node, name="node_reboot"),
+    path("node/actions/reapply-settings", node_views.reapply_settings, name="node_reapply_settings"),
+    path("node/actions/regenerate-card", node_views.regenerate_contact_card, name="node_regenerate_card"),
+    path("node/actions/sync-contacts", node_views.sync_contacts, name="node_sync_contacts"),
+    path("node/actions/reconfigure", node_views.reconfigure_node, name="node_reconfigure"),
+    path(
+        "commands/<int:node_command_id>/partials/progress",
+        command_views.show_command_progress,
+        name="command_progress",
+    ),
+    path("contacts", contact_views.show_contacts, name="contacts"),
+    path("contacts/partials/list", contact_views.show_contact_list, name="contact_list"),
+    path("contacts/card/preview", contact_views.preview_contact_card, name="contact_card_preview"),
+    path("contacts/card/add", contact_views.add_contact_card, name="contact_card_add"),
+    path("contacts/<int:contact_id>/delete", contact_views.delete_contact, name="contact_delete"),
+    path(
+        "contacts/<int:contact_id>/partials/delete-summary",
+        contact_views.show_contact_deletion_summary,
+        name="contact_delete_summary",
+    ),
+    path("contacts/pairing/start", pairing_views.start_pairing, name="pairing_start"),
+    path("contacts/pairing/<int:pairing_session_id>/stop", pairing_views.stop_pairing, name="pairing_stop"),
+    path(
+        "contacts/pairing/<int:pairing_session_id>/adverts/<int:heard_advert_id>/add",
+        pairing_views.add_heard_advert,
+        name="pairing_add_advert",
+    ),
+    path(
+        "contacts/pairing/<int:pairing_session_id>/partials/panel",
+        pairing_views.show_pairing_panel,
+        name="pairing_panel",
+    ),
+    path("users", user_views.show_users, name="users"),
+    path("users/<int:user_id>/delete", user_views.delete_user, name="user_delete"),
+    path(
+        "users/<int:user_id>/partials/delete-summary",
+        user_views.show_user_deletion_summary,
+        name="user_delete_summary",
+    ),
+    path("messages", message_views.show_messages, name="messages"),
+    path("messages/traffic", message_views.show_traffic, name="traffic"),
+    path("messages/refresh-sessions", message_views.show_refresh_sessions, name="refresh_sessions"),
+    path("messages/partials/table", message_views.show_message_table, name="message_table"),
+    path("messages/<int:message_id>/partials/details", message_views.show_message_details, name="message_details"),
+    path("messages/traffic/partials/rows", message_views.show_traffic_rows, name="traffic_rows"),
+]

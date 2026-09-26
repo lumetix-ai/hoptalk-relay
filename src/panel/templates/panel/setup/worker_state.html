@@ -1,0 +1,24 @@
+{% load heroicons %}
+<div class="flex items-start gap-3 text-sm">
+  {% if situation.node_is_connected %}
+    {% heroicon_outline "signal" class="size-5 shrink-0 text-emerald-600 dark:text-emerald-400" %}
+    <p>
+      The relay worker is connected to the node over {{ situation.worker_status.transport_description|default:"its transport" }}.
+    </p>
+  {% elif situation.worker_is_online %}
+    {% heroicon_outline "arrow-path" class="size-5 shrink-0 animate-spin text-amber-600 motion-reduce:animate-none dark:text-amber-400" %}
+    <div>
+      <p>
+        The relay worker is running but not connected to the node ({{ situation.worker_status.get_connection_state_display|lower }}, {{ situation.worker_status.transport_description|default:"no transport" }}).
+      </p>
+      {% if situation.worker_status.last_error_message %}
+        <p class="mt-1 text-slate-600 dark:text-slate-400">Last error: {{ situation.worker_status.last_error_message }}</p>
+      {% endif %}
+    </div>
+  {% else %}
+    {% heroicon_outline "signal-slash" class="size-5 shrink-0 text-red-600 dark:text-red-400" %}
+    <p>
+      The relay worker is offline. Setup waits for it; <code class="font-mono">make relay-logs</code> shows why it is not running.
+    </p>
+  {% endif %}
+</div>

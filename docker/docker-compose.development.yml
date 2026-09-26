@@ -1,0 +1,44 @@
+services:
+
+    app:
+        build:
+            target: app-development
+        environment:
+            DJANGO_DEBUG: "true"
+            # gunicorn reads extra command-line arguments from this variable. With it,
+            # a changed Python file under src/ restarts the workers.
+            GUNICORN_CMD_ARGS: "--reload"
+        volumes:
+            -   ../src:/app
+
+    relay:
+        environment:
+            DJANGO_DEBUG: "true"
+        # The worker does not reload by itself: "make relay-restart" picks up a change.
+        volumes:
+            -   ../src:/app
+
+    database:
+        volumes:
+            # A named volume rather than a bind mount. The PostgreSQL image changes the
+            # ownership of its data directory, which the macOS file sharing layer does not
+            # carry over faithfully, and fsync through it is slow.
+            -   database:/var/lib/postgresql
+
+    node:
+        image: node:${NODE_VERSION:-24}-trixie-slim
+        working_dir: /app
+        user: "${APP_UID:-1000}:${APP_GID:-1000}"
+        environment:
+            npm_config_cache: /tmp/npm
+        volumes:
+            -   ../src:/app
+        init: true
+        # The Tailwind binary is started directly rather than through npm, which does not
+        # pass the stop signal on. "always" keeps watching although the container has no
+        # standard input; a plain --watch exits at once.
+        command: ["node_modules/.bin/tailwindcss", "--input", "frontend/main.css", "--output", "build/static/app.css", "--watch=always"]
+        profiles: ["development"]
+
+volumes:
+    database:

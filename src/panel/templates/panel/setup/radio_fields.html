@@ -1,0 +1,53 @@
+{% load panel_formatting %}
+<fieldset id="radio-fields" class="space-y-4">
+  <legend class="section-title">Radio</legend>
+  {% with preset_field=configuration_form.radio_preset %}
+    <div class="max-w-2xl space-y-1">
+      <label for="{{ preset_field.id_for_label }}" class="label">{{ preset_field.label }}</label>
+      <select name="{{ preset_field.html_name }}"
+              id="{{ preset_field.id_for_label }}"
+              class="input"
+              hx-get="{% url 'panel:setup_radio_fields' %}"
+              hx-trigger="change"
+              hx-target="#radio-fields"
+              hx-swap="outerHTML"
+              hx-include="closest fieldset">
+        {% for preset_value, preset_label in preset_field.field.choices %}
+          <option value="{{ preset_value }}"
+                  {% if preset_value == preset_field.value %}selected{% endif %}>{{ preset_label }}</option>
+        {% endfor %}
+      </select>
+      <p class="help-text">
+        Presets are the MeshCore community's suggestions, bundled with the relay; nothing is fetched from the Internet.
+      </p>
+      {% for error in preset_field.errors %}<p class="field-error" role="alert">{{ error }}</p>{% endfor %}
+    </div>
+  {% endwith %}
+  {% if configuration_form.radio_preset.value == "manual" %}
+    <div class="grid gap-4 sm:grid-cols-2">
+      {% include "panel/includes/form_field.html" with field=configuration_form.frequency_megahertz help_text="150.000 to 2500.000 MHz, at most three decimals." %}
+      {% include "panel/includes/form_field.html" with field=configuration_form.bandwidth_kilohertz %}
+      {% include "panel/includes/form_field.html" with field=configuration_form.spreading_factor help_text="5 to 12." %}
+      {% include "panel/includes/form_field.html" with field=configuration_form.coding_rate help_text="5 to 8 (4/5 to 4/8)." %}
+    </div>
+  {% else %}
+    <input type="hidden"
+           name="{{ configuration_form.frequency_megahertz.html_name }}"
+           value="{{ configuration_form.frequency_megahertz.value|default_if_none:'' }}">
+    <input type="hidden"
+           name="{{ configuration_form.bandwidth_kilohertz.html_name }}"
+           value="{{ configuration_form.bandwidth_kilohertz.value|default_if_none:'' }}">
+    <input type="hidden"
+           name="{{ configuration_form.spreading_factor.html_name }}"
+           value="{{ configuration_form.spreading_factor.value|default_if_none:'' }}">
+    <input type="hidden"
+           name="{{ configuration_form.coding_rate.html_name }}"
+           value="{{ configuration_form.coding_rate.value|default_if_none:'' }}">
+    <p class="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:bg-slate-950 dark:text-slate-300">
+      {{ configuration_form.frequency_megahertz.value }} MHz · BW {{ configuration_form.bandwidth_kilohertz.value }} kHz · SF {{ configuration_form.spreading_factor.value }} · CR {{ configuration_form.coding_rate.value }}
+    </p>
+  {% endif %}
+  <div class="max-w-xs">
+    {% include "panel/includes/form_field.html" with field=configuration_form.path_hash_size help_text="Bytes of each repeater's hash in a route. Every node of the mesh should use the same size." %}
+  </div>
+</fieldset>

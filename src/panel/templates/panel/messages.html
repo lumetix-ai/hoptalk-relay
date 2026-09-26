@@ -1,0 +1,324 @@
+{% extends "panel/base.html" %}
+{% load heroicons panel_formatting %}
+{% block title %}Messages · HopTalk Relay{% endblock title %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Messages</h1>
+      <p class="page-description">
+        Every message with its deliveries and receipts, newest first, for debugging. Message texts are stored as they arrived.
+      </p>
+    </div>
+  </div>
+  {% include "panel/includes/message_tabs.html" with active_tab="messages" %}
+  <form method="get"
+        action="{% url 'panel:messages' %}"
+        hx-get="{% url 'panel:messages' %}"
+        hx-trigger="change, submit"
+        hx-target="#messages-table"
+        hx-swap="outerHTML"
+        hx-push-url="true"
+        class="card card-body mb-4 flex flex-wrap items-end gap-4">
+    <div class="w-full sm:w-48">{% include "panel/includes/form_field.html" with field=message_filter_form.user %}</div>
+    <div class="w-full sm:w-56">{% include "panel/includes/form_field.html" with field=message_filter_form.status %}</div>
+    <div class="pb-2">{% include "panel/includes/form_field.html" with field=message_filter_form.live %}</div>
+    <button type="submit" class="button button-secondary">
+      {% heroicon_outline "funnel" class="size-4" %}
+      Filter
+    </button>
+  </form>
+  {% partialdef message_table inline %}
+    <div id="messages-table"
+         class="card"
+         {% if is_live %}hx-get="{% url 'panel:message_table' %}?{{ table_query }}" hx-trigger="every 5s" hx-swap="outerHTML"{% endif %}>
+      {% if message_rows %}
+        <ul class="divide-y divide-slate-100 dark:divide-slate-800">
+          {% for message_row in message_rows %}
+            {% with message=message_row.message %}
+              <li>
+                <details class="group">
+                  <summary class="flex cursor-pointer list-none flex-col gap-2 px-4 py-3 hover:bg-slate-50 sm:px-5 lg:flex-row lg:items-start lg:gap-4 dark:hover:bg-slate-800/50">
+                    <div class="flex shrink-0 items-center gap-2 lg:w-44">
+                      {% heroicon_mini "chevron-right" class="size-4 text-slate-400 transition-transform group-open:rotate-90" %}
+                      <div>
+                        <p class="text-xs font-medium text-slate-500 dark:text-slate-400">#{{ message.pk }}</p>
+                        <p class="text-xs text-slate-500 tabular-nums dark:text-slate-400">
+                          {{ message.accepted_at|default:message.created_at|date:"j M, H:i:s" }}
+                        </p>
+                      </div>
+                    </div>
+                    <div class="min-w-0 flex-1 space-y-1">
+                      <p class="text-sm">
+                        <span class="font-medium">{{ message.sender.username }}</span>
+                        <span class="text-slate-500 dark:text-slate-400" aria-label="to">→</span>
+                        <span class="font-medium">{{ message.recipient.username }}</span>
+                        <span class="ml-1 font-mono text-xs text-slate-500 dark:text-slate-400"
+                              title="{{ message.client_message_id|message_id_time|date:'Y-m-d H:i:s.u e' }}">{{ message.client_message_id }}</span>
+                      </p>
+                      <p class="text-sm break-words text-slate-700 dark:text-slate-300">
+                        {% if message.text is not None %}
+                          {{ message.text|truncatechars:80 }}
+                        {% else %}
+                          <span class="text-slate-500 dark:text-slate-400">parts still arriving</span>
+                        {% endif %}
+                      </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-1.5 lg:max-w-md lg:justify-end">
+                      {% if message.accepted_at is None %}
+                        <span class="badge badge-warning">receiving {{ message_row.received_part_count }}/{{ message.part_count }} parts</span>
+                      {% elif message.read_at %}
+                        <span class="badge badge-success">read</span>
+                      {% elif message.delivered_at %}
+                        <span class="badge badge-success">delivered</span>
+                      {% else %}
+                        <span class="badge badge-neutral">not delivered</span>
+                      {% endif %}
+                      {% if message.part_count > 1 %}<span class="badge badge-neutral">{{ message.part_count }} parts</span>{% endif %}
+                      {% for delivery_chip in message_row.delivery_chips %}
+                        <span class="badge badge-{{ delivery_chip.tone }}"
+                              title="{{ delivery_chip.device_description }}">{{ delivery_chip.device_label }} {{ delivery_chip.text }}</span>
+                      {% endfor %}
+                    </div>
+                  </summary>
+                  <div id="message-details-{{ message.pk }}"
+                       class="border-t border-slate-100 bg-slate-50/60 px-4 py-4 sm:px-5 dark:border-slate-800 dark:bg-slate-950/40"
+                       hx-get="{% url 'panel:message_details' message.pk %}"
+                       hx-trigger="intersect once"
+                       hx-swap="innerHTML">
+                    <p class="text-sm text-slate-500 dark:text-slate-400">Loading the details…</p>
+                  </div>
+                </details>
+              </li>
+            {% endwith %}
+          {% endfor %}
+        </ul>
+        <div class="flex items-center gap-3 border-t border-slate-200 px-4 py-3 text-sm sm:px-5 dark:border-slate-800">
+          {% if not is_first_page %}
+            <a href="{% url 'panel:messages' %}?{{ filter_query }}"
+               class="text-link">Newest</a>
+          {% endif %}
+          {% if older_messages_before %}
+            <a href="{% url 'panel:messages' %}?{{ filter_query }}{% if filter_query %}&{% endif %}before={{ older_messages_before }}"
+               class="text-link ml-auto">Older</a>
+          {% endif %}
+        </div>
+      {% else %}
+        <div class="empty-state">
+          {% heroicon_outline "chat-bubble-left-right" class="size-8" %}
+          <p>No messages match.</p>
+        </div>
+      {% endif %}
+    </div>
+  {% endpartialdef %}
+  {% partialdef message_details %}
+    <div class="space-y-5 text-sm">
+      <dl class="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
+        <div>
+          <dt class="text-xs text-slate-500 dark:text-slate-400">Client id</dt>
+          <dd class="font-mono text-xs">
+            {{ message.client_message_id }}
+            {% with encoded_time=message.client_message_id|message_id_time %}
+              {% if encoded_time %}<span class="block font-sans text-slate-500 dark:text-slate-400">encodes {{ encoded_time|date:"Y-m-d H:i:s.u" }}</span>{% endif %}
+            {% endwith %}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-500 dark:text-slate-400">Sent from</dt>
+          <dd>
+            {{ message.sender_device|default:"a deleted device" }}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-500 dark:text-slate-400">First part · last part</dt>
+          <dd class="tabular-nums">
+            {{ message.created_at|date:"j M, H:i:s" }} · {{ message.last_part_at|date:"H:i:s" }}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-500 dark:text-slate-400">Accepted</dt>
+          <dd class="tabular-nums">
+            {{ message.accepted_at|date:"j M, H:i:s"|default:"—" }}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-500 dark:text-slate-400">Delivered</dt>
+          <dd class="tabular-nums">
+            {{ message.delivered_at|date:"j M, H:i:s"|default:"—" }}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs text-slate-500 dark:text-slate-400">Read</dt>
+          <dd class="tabular-nums">
+            {{ message.read_at|date:"j M, H:i:s"|default:"—" }}
+          </dd>
+        </div>
+      </dl>
+      <div>
+        <h3 class="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">Parts</h3>
+        <ol class="space-y-1">
+          {% for part in parts %}
+            <li class="flex gap-3">
+              <span class="w-16 shrink-0 text-xs text-slate-500 tabular-nums dark:text-slate-400">{{ part.part_number }}/{{ message.part_count }}</span>
+              {% if part.text is not None %}
+                <span class="w-16 shrink-0 text-xs text-slate-500 tabular-nums dark:text-slate-400">{{ part.byte_count }} B</span>
+                <span class="min-w-0 font-mono text-xs break-words whitespace-pre-wrap">{{ part.text }}</span>
+              {% else %}
+                <span class="badge badge-warning">missing</span>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ol>
+      </div>
+      <div>
+        <h3 class="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">Deliveries</h3>
+        {% if labelled_deliveries %}
+          <div class="relative overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">Device</th>
+                  <th scope="col">State</th>
+                  <th scope="col">Arm</th>
+                  <th scope="col">Attempts</th>
+                  <th scope="col">Next attempt</th>
+                  <th scope="col">Received</th>
+                  <th scope="col">Round pending</th>
+                  <th scope="col">Round started</th>
+                  <th scope="col">Outcome</th>
+                  <th scope="col">Refresh</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for labelled_delivery in labelled_deliveries %}
+                  {% with delivery=labelled_delivery.delivery %}
+                    <tr>
+                      <td>
+                        <span class="font-medium">{{ labelled_delivery.device_label }}</span>
+                        <span class="block text-xs text-slate-500 dark:text-slate-400">{{ delivery.device }}</span>
+                      </td>
+                      <td>{% include "panel/includes/state_badge.html" with state=delivery.state %}</td>
+                      <td class="tabular-nums">{{ delivery.arm_generation }}</td>
+                      <td class="tabular-nums">{{ delivery.attempt_count }}/{{ delivery.maximum_attempts }}</td>
+                      <td class="whitespace-nowrap tabular-nums">{{ delivery.next_attempt_at|date:"H:i:s"|default:"—" }}</td>
+                      <td class="font-mono text-xs">{{ delivery.parts_received_mask|parts_mask:message.part_count }}</td>
+                      <td class="font-mono text-xs">{{ delivery.round_pending_parts_mask|parts_mask:message.part_count }}</td>
+                      <td class="whitespace-nowrap tabular-nums">{{ delivery.round_started_at|date:"H:i:s"|default:"—" }}</td>
+                      <td class="text-xs whitespace-nowrap">
+                        {% if delivery.delivered_at %}delivered {{ delivery.delivered_at|date:"H:i:s" }}{% endif %}
+                        {% if delivery.read_at %}<span class="block">read {{ delivery.read_at|date:"H:i:s" }}</span>{% endif %}
+                        {% if delivery.failed_at %}failed {{ delivery.failed_at|date:"H:i:s" }} ({{ delivery.get_failure_reason_display|lower }}){% endif %}
+                        {% if delivery.cancelled_at %}cancelled {{ delivery.cancelled_at|date:"H:i:s" }}{% endif %}
+                      </td>
+                      <td>
+                        {% if delivery.refresh_session_id %}
+                          <a href="{% url 'panel:refresh_sessions' %}#refresh-session-{{ delivery.refresh_session_id }}"
+                             class="text-link">#{{ delivery.refresh_session_id }}</a>
+                        {% else %}
+                          —
+                        {% endif %}
+                      </td>
+                    </tr>
+                  {% endwith %}
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="text-slate-500 dark:text-slate-400">
+            {% if message.accepted_at %}
+              No deliveries: the recipient had no device when the message was accepted.
+            {% else %}
+              None until every part has arrived.
+            {% endif %}
+          </p>
+        {% endif %}
+      </div>
+      <div>
+        <h3 class="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">Receipts to the sender's devices</h3>
+        {% if receipts %}
+          <div class="relative overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">Device</th>
+                  <th scope="col">Target</th>
+                  <th scope="col">Confirmed</th>
+                  <th scope="col">State</th>
+                  <th scope="col">Attempts</th>
+                  <th scope="col">Next attempt</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for receipt in receipts %}
+                  <tr>
+                    <td>{{ receipt.device }}</td>
+                    <td>{{ receipt.target_level|receipt_level }}</td>
+                    <td>{{ receipt.confirmed_level|receipt_level }}</td>
+                    <td>{% include "panel/includes/state_badge.html" with state=receipt.state %}</td>
+                    <td class="tabular-nums">{{ receipt.attempt_count }}/{{ receipt.maximum_attempts }}</td>
+                    <td class="whitespace-nowrap tabular-nums">{{ receipt.next_attempt_at|date:"H:i:s"|default:"—" }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="text-slate-500 dark:text-slate-400">No receipts yet.</p>
+        {% endif %}
+      </div>
+      <div>
+        <h3 class="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">Packets sent</h3>
+        {% if outbound_packets %}
+          <div class="relative overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">Time</th>
+                  <th scope="col">To</th>
+                  <th scope="col">Purpose</th>
+                  <th scope="col">Part</th>
+                  <th scope="col">Route</th>
+                  <th scope="col">ACK code</th>
+                  <th scope="col">State</th>
+                  <th scope="col">Round trip</th>
+                  <th scope="col">Route reset</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for outbound_packet in outbound_packets %}
+                  <tr>
+                    <td class="whitespace-nowrap tabular-nums">{{ outbound_packet.prepared_at|date:"H:i:s" }}</td>
+                    <td>{{ outbound_packet.contact_label }}</td>
+                    <td>{{ outbound_packet.get_purpose_display }}</td>
+                    <td class="tabular-nums">
+                      {% if outbound_packet.part_number %}
+                        {{ outbound_packet.part_number }}
+                      {% elif outbound_packet.receipt_level %}
+                        {{ outbound_packet.receipt_level|receipt_level }}
+                      {% else %}
+                        —
+                      {% endif %}
+                    </td>
+                    <td>{{ outbound_packet.route|default:"—" }}</td>
+                    <td class="font-mono text-xs">{{ outbound_packet.expected_acknowledgement_code|default:"—" }}</td>
+                    <td>{% include "panel/includes/state_badge.html" with state=outbound_packet.state %}</td>
+                    <td class="tabular-nums">
+                      {% if outbound_packet.round_trip_milliseconds is not None %}
+                        {{ outbound_packet.round_trip_milliseconds }} ms
+                      {% else %}
+                        —
+                      {% endif %}
+                    </td>
+                    <td class="text-xs">{{ outbound_packet.get_route_reset_state_display }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="text-slate-500 dark:text-slate-400">Nothing sent for this message yet.</p>
+        {% endif %}
+      </div>
+    </div>
+  {% endpartialdef %}
+{% endblock content %}

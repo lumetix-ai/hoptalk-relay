@@ -1,0 +1,62 @@
+{% extends "panel/base.html" %}
+{% load heroicons panel_formatting %}
+{% block title %}Setup · HopTalk Relay{% endblock title %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Node setup</h1>
+      <p class="page-description">
+        Setup reads the node attached to the server, factory resets it so that it gets a new identity, configures its name, radio and the settings the relay needs, and saves them.
+      </p>
+    </div>
+  </div>
+  {% partialdef setup_step inline %}
+    {# Buttons in this polled region carry ids: htmx gives the focus back only to an element with an id. #}
+    <div id="setup-step"
+         class="space-y-6"
+         {% if situation.should_poll %}hx-get="{% url 'panel:setup_step' %}" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+      <ol class="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4"
+          aria-label="Setup stages">
+        {% for stage_label in setup_stages %}
+          <li class="flex items-center gap-2 rounded-lg border px-3 py-2 {% if forloop.counter == stage_number %}border-emerald-600 bg-emerald-50 font-medium text-emerald-800 dark:border-emerald-500 dark:bg-emerald-950/40 dark:text-emerald-200{% elif forloop.counter < stage_number %}border-slate-200 bg-white text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300{% else %}border-slate-200 text-slate-500 dark:border-slate-800 dark:text-slate-400{% endif %}"
+              {% if forloop.counter == stage_number %}aria-current="step"{% endif %}>
+            <span class="step-marker {% if forloop.counter < stage_number %}bg-emerald-600 text-white dark:bg-emerald-500 dark:text-slate-950{% elif forloop.counter == stage_number %}bg-emerald-600 text-white dark:bg-emerald-500 dark:text-slate-950{% else %}bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400{% endif %}">
+              {% if forloop.counter < stage_number %}
+                {% heroicon_mini "check" class="size-4" %}
+              {% else %}
+                {{ forloop.counter }}
+              {% endif %}
+            </span>
+            {{ stage_label }}
+          </li>
+        {% endfor %}
+      </ol>
+      {% if setup_run.last_error and setup_step != "reading" %}
+        <div class="alert alert-danger" role="alert">
+          {% heroicon_outline "exclamation-triangle" class="size-5 shrink-0" %}
+          <p>{{ setup_run.last_error }}</p>
+        </div>
+      {% endif %}
+      {% if setup_step == "start" %}
+        {% include "panel/setup/start_step.html" %}
+      {% elif setup_step == "reading" %}
+        {% include "panel/setup/reading_step.html" %}
+      {% elif setup_step == "confirm_reset" %}
+        {% include "panel/setup/confirm_reset_step.html" %}
+      {% elif setup_step == "resetting" %}
+        {% include "panel/setup/resetting_step.html" %}
+      {% elif setup_step == "configure" %}
+        {% include "panel/setup/configure_step.html" %}
+      {% elif setup_step == "review" %}
+        {% include "panel/setup/review_step.html" %}
+      {% elif setup_step == "configuring" %}
+        {% include "panel/setup/configuring_step.html" %}
+      {% else %}
+        {% include "panel/setup/done_step.html" %}
+      {% endif %}
+    </div>
+  {% endpartialdef %}
+  {% partialdef radio_fields %}
+    {% include "panel/setup/radio_fields.html" %}
+  {% endpartialdef %}
+{% endblock content %}

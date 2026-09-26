@@ -1,0 +1,145 @@
+{% extends "panel/base.html" %}
+{% load heroicons panel_formatting %}
+{% block title %}Users · HopTalk Relay{% endblock title %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Users</h1>
+      <p class="page-description">
+        Users register from the HopTalk app. Each device is a contact of the relay node that signed in as that user.
+      </p>
+    </div>
+  </div>
+  <section class="card" aria-labelledby="user-list-title">
+    <div class="card-header">
+      <h2 id="user-list-title" class="card-title">
+        {% heroicon_outline "user-group" class="size-5 text-slate-500" %}
+        {{ users|length }} user{{ users|length|pluralize }}
+      </h2>
+    </div>
+    {% if users %}
+      <ul class="divide-y divide-slate-100 dark:divide-slate-800">
+        {% for user in users %}
+          <li id="user-{{ user.pk }}">
+            <details class="group">
+              <summary class="flex cursor-pointer list-none flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 hover:bg-slate-50 sm:px-5 dark:hover:bg-slate-800/50">
+                {% heroicon_mini "chevron-right" class="size-4 text-slate-400 transition-transform group-open:rotate-90" %}
+                <span class="font-medium text-slate-900 dark:text-white">@{{ user.username }}</span>
+                <span class="text-xs text-slate-500 dark:text-slate-400">since {{ user.created_at|date:"j M Y" }}</span>
+                <span class="text-xs text-slate-600 dark:text-slate-300">{{ user.device_count }} device{{ user.device_count|pluralize }}</span>
+                <span class="text-xs text-slate-600 dark:text-slate-300">{{ user.sent_message_count }} sent · {{ user.received_message_count }} received</span>
+                {% if not user.device_count %}
+                  <span class="badge badge-warning">
+                    {% heroicon_mini "exclamation-triangle" class="size-3" %}
+                    no device
+                  </span>
+                {% endif %}
+              </summary>
+              <div class="space-y-4 border-t border-slate-100 bg-slate-50/60 px-4 py-4 sm:px-5 dark:border-slate-800 dark:bg-slate-950/40">
+                {% if user.devices.all %}
+                  <div class="relative overflow-x-auto">
+                    <table class="data-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">Device</th>
+                          <th scope="col">Key</th>
+                          <th scope="col">Linked</th>
+                          <th scope="col">Last heard</th>
+                          <th scope="col">On the node</th>
+                          <th scope="col">
+                            <span class="sr-only">Actions</span>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for contact in user.devices.all %}
+                          <tr>
+                            <td class="font-medium">{{ contact.name|default:"(no name)" }}</td>
+                            <td class="font-mono text-xs">{{ contact.public_key|key_prefix }}</td>
+                            <td class="whitespace-nowrap">{{ contact.linked_at|date:"j M Y, H:i" }}</td>
+                            <td class="whitespace-nowrap">
+                              {% if contact.last_heard_at %}
+                                {{ contact.last_heard_at|timesince }} ago
+                              {% else %}
+                                never
+                              {% endif %}
+                            </td>
+                            <td>{% include "panel/includes/sync_state_badge.html" %}</td>
+                            <td class="text-right">
+                              {% url 'panel:users' as users_url %}
+                              {% include "panel/includes/contact_delete_dialog.html" with next_url=users_url %}
+                            </td>
+                          </tr>
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  </div>
+                {% else %}
+                  <p class="text-sm text-slate-600 dark:text-slate-400">
+                    No device is signed in as @{{ user.username }}; messages to this user wait until one signs in.
+                  </p>
+                {% endif %}
+                <div>
+                  <button type="button"
+                          class="button button-danger button-small"
+                          commandfor="delete-user-{{ user.pk }}"
+                          command="show-modal">
+                    {% heroicon_outline "trash" class="size-4" %}
+                    Delete user…
+                  </button>
+                </div>
+              </div>
+            </details>
+            <dialog id="delete-user-{{ user.pk }}"
+                    class="dialog"
+                    aria-labelledby="delete-user-{{ user.pk }}-title">
+              <form method="post" action="{% url 'panel:user_delete' user.pk %}">
+                {% csrf_token %}
+                <div class="dialog-body">
+                  <h2 id="delete-user-{{ user.pk }}-title"
+                      class="text-lg font-semibold">Delete @{{ user.username }}?</h2>
+                  <div hx-get="{% url 'panel:user_delete_summary' user.pk %}"
+                       hx-trigger="intersect once"
+                       hx-swap="innerHTML">
+                    <p class="text-sm text-slate-500 dark:text-slate-400">Counting what goes with it…</p>
+                  </div>
+                  <div class="space-y-1">
+                    <label for="typed-username-{{ user.pk }}" class="label">
+                      Type <span class="font-mono font-semibold">{{ user.username }}</span> to confirm
+                    </label>
+                    <input type="text"
+                           id="typed-username-{{ user.pk }}"
+                           name="{{ user_deletion_form.typed_username.html_name }}"
+                           class="input"
+                           autocomplete="off"
+                           required
+                           data-confirmation-text="{{ user.username }}">
+                  </div>
+                </div>
+                <div class="dialog-actions">
+                  <button type="button"
+                          class="button button-secondary"
+                          commandfor="delete-user-{{ user.pk }}"
+                          command="close">Cancel</button>
+                  <button type="submit" class="button button-danger" data-confirmation-submit>Delete user</button>
+                </div>
+              </form>
+            </dialog>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <div class="empty-state">
+        {% heroicon_outline "user-group" class="size-8" %}
+        <p>No user has registered yet. A user adds the relay's contact card, then signs up from the HopTalk app.</p>
+      </div>
+    {% endif %}
+  </section>
+  {% partialdef user_deletion_summary %}
+    {% with user=deletion_summary.user %}
+      <p class="text-sm text-slate-700 dark:text-slate-300">
+        This deletes @{{ user.username }}, its {{ deletion_summary.device_count }} device{{ deletion_summary.device_count|pluralize }} (removed from the node as well) and the {{ deletion_summary.sent_message_count|add:deletion_summary.received_message_count }} message{{ deletion_summary.sent_message_count|add:deletion_summary.received_message_count|pluralize }} it sent or received, delivered or not. Other users' conversations with @{{ user.username }} disappear from the server too.
+      </p>
+    {% endwith %}
+  {% endpartialdef %}
+{% endblock content %}

@@ -1,0 +1,465 @@
+{% extends "panel/base.html" %}
+{% load heroicons panel_formatting %}
+{% block title %}Node · HopTalk Relay{% endblock title %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Node</h1>
+      <p class="page-description">
+        The relay worker, the node it drives and what is queued for the mesh. This page updates every few seconds.
+      </p>
+    </div>
+  </div>
+  {% partialdef node_status inline %}
+    {# Buttons in this polled region carry ids: htmx gives the focus back only to an element with an id. #}
+    <div id="node-status"
+         class="grid gap-6 lg:grid-cols-2"
+         hx-get="{% url 'panel:node_status' %}"
+         hx-trigger="every 3s"
+         hx-swap="outerHTML">
+      {% with worker_status=dashboard.worker_status node_configuration=dashboard.node_configuration %}
+        <section class="card" aria-labelledby="relay-card-title">
+          <div class="card-header">
+            <h2 id="relay-card-title" class="card-title">
+              {% heroicon_outline "server" class="size-5 text-slate-500" %}
+              Relay
+            </h2>
+            {% if dashboard.worker_is_online %}
+              <span class="badge badge-{{ worker_status.relay_mode|relay_mode_tone }}">{{ worker_status.get_relay_mode_display }}</span>
+            {% else %}
+              <span class="badge badge-danger">Worker offline</span>
+            {% endif %}
+          </div>
+          <div class="card-body">
+            <dl class="description-list">
+              <dt>Connection</dt>
+              <dd>
+                {% if not worker_status %}
+                  <span class="text-slate-500 dark:text-slate-400">never reported</span>
+                {% elif not dashboard.worker_is_online %}
+                  <span class="text-slate-500 dark:text-slate-400">unknown: the worker is offline</span>
+                {% else %}
+                  {% include "panel/includes/state_badge.html" with state=worker_status.connection_state %}
+                  {% if dashboard.connected_for is not None %}
+                    <span class="ml-1 text-slate-500 dark:text-slate-400">for {{ dashboard.connected_for|duration }}</span>
+                  {% endif %}
+                {% endif %}
+              </dd>
+              <dt>Transport</dt>
+              <dd class="font-mono text-xs">
+                {{ worker_status.transport_description|default:"—" }}
+              </dd>
+              <dt>Heartbeat</dt>
+              <dd>
+                {% if dashboard.heartbeat_age is not None %}
+                  {{ dashboard.heartbeat_age|duration }} ago
+                {% else %}
+                  never
+                {% endif %}
+              </dd>
+              <dt>Failed connection attempts</dt>
+              <dd>
+                {{ worker_status.consecutive_connect_failures|default:0 }} in a row
+              </dd>
+              <dt>Last error</dt>
+              <dd>
+                {% if worker_status.last_error_message %}
+                  <span class="break-words text-red-700 dark:text-red-300">{{ worker_status.last_error_message }}</span>
+                  <span class="block text-xs text-slate-500 dark:text-slate-400">
+                    {{ worker_status.last_error_at|date:"j M, H:i:s" }} · the history is in <code class="font-mono">make relay-logs</code>
+                  </span>
+                {% else %}
+                  none
+                {% endif %}
+              </dd>
+            </dl>
+          </div>
+        </section>
+        <section class="card" aria-labelledby="node-card-title">
+          <div class="card-header">
+            <h2 id="node-card-title" class="card-title">
+              {% heroicon_outline "cpu-chip" class="size-5 text-slate-500" %}
+              {{ node_configuration.node_name|default:"Node" }}
+            </h2>
+            {% if node_configuration %}<span class="badge badge-neutral">{{ node_configuration.radio_preset_title }}</span>{% endif %}
+          </div>
+          <div class="card-body">
+            {% if node_configuration %}
+              <dl class="description-list">
+                <dt>Public key</dt>
+                <dd class="flex items-start gap-2">
+                  <span id="node-public-key" class="monospace-text">{{ node_configuration.node_public_key }}</span>
+                  {% include "panel/includes/copy_button.html" with copy_target="node-public-key" %}
+                </dd>
+                <dt>Identity backup</dt>
+                <dd>
+                  <span class="badge badge-{{ dashboard.identity_backup.tone }}">{{ dashboard.identity_backup.status_label }}</span>
+                  {% if dashboard.identity_backup.taken_at %}
+                    <span class="ml-1 text-slate-500 dark:text-slate-400">taken {{ dashboard.identity_backup.taken_at|date:"j M Y, H:i" }}</span>
+                  {% endif %}
+                  <span class="block text-xs text-slate-500 dark:text-slate-400">{{ dashboard.identity_backup.detail }}</span>
+                </dd>
+                <dt>Firmware</dt>
+                <dd>
+                  {{ node_configuration.node_firmware_version }} · {{ node_configuration.node_firmware_build }} · {{ node_configuration.node_model }} · protocol {{ worker_status.node_protocol_version|default:node_configuration.node_protocol_version }}
+                </dd>
+                <dt>Radio</dt>
+                <dd>
+                  {% if worker_status.node_radio_summary %}
+                    {{ worker_status.node_radio_summary }}
+                  {% else %}
+                    {{ node_configuration.radio_frequency_kilohertz|thousandths }} MHz / SF{{ node_configuration.radio_spreading_factor }} / BW{{ node_configuration.radio_bandwidth_hertz|thousandths }} / CR{{ node_configuration.radio_coding_rate }}
+                  {% endif %}
+                </dd>
+                <dt>Transmit power</dt>
+                <dd>
+                  {{ node_configuration.radio_transmit_power_dbm }} dBm
+                </dd>
+                <dt>Path hash size · multi-acks</dt>
+                <dd>
+                  {{ node_configuration.routing_path_hash_size }} byte{{ node_configuration.routing_path_hash_size|pluralize }} · {{ node_configuration.messaging_multi_acks }}
+                </dd>
+                <dt>Clock offset</dt>
+                <dd>
+                  {% if worker_status.node_clock_offset_seconds is not None %}
+                    {{ worker_status.node_clock_offset_seconds }} s from the server
+                  {% else %}
+                    unknown
+                  {% endif %}
+                </dd>
+                <dt>Contacts</dt>
+                <dd>
+                  {{ worker_status.node_contact_count|default_if_none:"?" }} on the node · {{ dashboard.contact_count }} in the database · capacity {{ dashboard.contact_capacity }}
+                  {% if dashboard.pending_contact_count %}
+                    <a href="{% url 'panel:contacts' %}"
+                       class="text-link ml-1">{{ dashboard.pending_contact_count }} not on the node</a>
+                  {% endif %}
+                </dd>
+              </dl>
+            {% elif dashboard.node_configuration_error %}
+              <p class="text-sm text-red-700 dark:text-red-300">{{ dashboard.node_configuration_error }}</p>
+            {% else %}
+              <div class="empty-state">
+                {% heroicon_outline "wrench-screwdriver" class="size-8" %}
+                <p>The node has not been set up yet.</p>
+                <a href="{% url 'panel:setup' %}"
+                   class="button button-primary button-small">Start setup</a>
+              </div>
+            {% endif %}
+          </div>
+        </section>
+        {% if dashboard.settings_drift %}
+          <section class="card lg:col-span-2" aria-labelledby="drift-card-title">
+            <div class="card-header">
+              <h2 id="drift-card-title" class="card-title">
+                {% heroicon_outline "adjustments-horizontal" class="size-5 text-amber-600" %}
+                Settings that differ from the configuration
+              </h2>
+              <form method="post" action="{% url 'panel:node_reapply_settings' %}">
+                {% csrf_token %}
+                <button type="submit"
+                        id="reapply-settings-button"
+                        class="button button-primary button-small">Re-apply configured settings</button>
+              </form>
+            </div>
+            <div class="relative overflow-x-auto">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Setting</th>
+                    <th scope="col">Configured</th>
+                    <th scope="col">On the node</th>
+                    <th scope="col">Corrected</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for drift_entry in dashboard.settings_drift %}
+                    <tr>
+                      <td class="font-mono text-xs">{{ drift_entry.key }}</td>
+                      <td>{{ drift_entry.expected }}</td>
+                      <td>{{ drift_entry.actual }}</td>
+                      <td>
+                        {% if drift_entry.corrected %}
+                          <span class="badge badge-success">automatically</span>
+                        {% else %}
+                          <span class="badge badge-warning">no</span>
+                        {% endif %}
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        {% endif %}
+        <section class="card" aria-labelledby="traffic-card-title">
+          <div class="card-header">
+            <h2 id="traffic-card-title" class="card-title">
+              {% heroicon_outline "arrows-right-left" class="size-5 text-slate-500" %}
+              Traffic
+            </h2>
+          </div>
+          <div class="card-body">
+            <dl class="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <div>
+                <dt class="statistic-label">Awaiting a firmware ACK</dt>
+                <dd class="statistic-value">
+                  {{ worker_status.packets_awaiting_node_acknowledgement|default:0 }}
+                </dd>
+              </div>
+              <div>
+                <dt class="statistic-label">Replies queued</dt>
+                <dd class="statistic-value">
+                  {{ worker_status.replies_queued|default:0 }}
+                </dd>
+              </div>
+              <div>
+                <dt class="statistic-label">Deliveries due</dt>
+                <dd class="statistic-value">
+                  {{ worker_status.deliveries_due|default:0 }}
+                </dd>
+              </div>
+              <div>
+                <dt class="statistic-label">Receipts due</dt>
+                <dd class="statistic-value">
+                  {{ worker_status.receipts_due|default:0 }}
+                </dd>
+              </div>
+              <div>
+                <dt class="statistic-label">Route resets pending</dt>
+                <dd class="statistic-value">
+                  {{ worker_status.pending_route_resets|default:0 }}
+                </dd>
+              </div>
+              <div>
+                <dt class="statistic-label">Users · devices</dt>
+                <dd class="statistic-value">
+                  {{ dashboard.user_count }} · {{ dashboard.device_count }}
+                </dd>
+              </div>
+              <div>
+                <dt class="statistic-label">Messages today</dt>
+                <dd class="statistic-value">
+                  {{ dashboard.messages_accepted_today }}
+                </dd>
+              </div>
+              <div>
+                <dt class="statistic-label">Not delivered yet</dt>
+                <dd class="statistic-value">
+                  {{ dashboard.undelivered_message_count }}
+                </dd>
+              </div>
+              <div>
+                <dt class="statistic-label">Failed deliveries, 24 h</dt>
+                <dd class="statistic-value {% if dashboard.failed_deliveries_last_day %}text-red-600 dark:text-red-400{% endif %}">
+                  {{ dashboard.failed_deliveries_last_day }}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </section>
+        <section class="card" aria-labelledby="configuration-card-title">
+          <div class="card-header">
+            <h2 id="configuration-card-title" class="card-title">
+              {% heroicon_outline "cog-6-tooth" class="size-5 text-slate-500" %}
+              Configuration
+            </h2>
+            <span class="text-xs text-slate-500 dark:text-slate-400">
+              {% if dashboard.effective_configuration_is_reported %}
+                as the worker runs it
+              {% else %}
+                from src/.env
+              {% endif %}
+            </span>
+          </div>
+          <div class="card-body">
+            <dl class="description-list">
+              {% for configuration_value in dashboard.effective_configuration %}
+                <dt>{{ configuration_value.label }}</dt>
+                <dd class="tabular-nums">
+                  {{ configuration_value.value }}
+                </dd>
+              {% endfor %}
+            </dl>
+            <p class="help-text mt-4">
+              Change the values in src/.env and run <code class="font-mono">make container-restart</code>.
+            </p>
+          </div>
+        </section>
+        <section class="card lg:col-span-2" aria-labelledby="commands-card-title">
+          <div class="card-header">
+            <h2 id="commands-card-title" class="card-title">
+              {% heroicon_outline "queue-list" class="size-5 text-slate-500" %}
+              Recent commands
+            </h2>
+          </div>
+          {% if dashboard.recent_commands %}
+            <ul class="divide-y divide-slate-100 dark:divide-slate-800">
+              {% for displayed_command in dashboard.recent_commands %}
+                {% with node_command=displayed_command.node_command %}
+                  <li class="px-4 py-3 sm:px-5">
+                    <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <span class="text-sm font-medium">{{ node_command.get_kind_display }}</span>
+                      {% include "panel/includes/state_badge.html" with state=node_command.state %}
+                      <span class="text-xs text-slate-500 dark:text-slate-400">
+                        #{{ node_command.pk }} · asked {{ node_command.created_at|date:"j M, H:i:s" }}
+                        {% if node_command.finished_at %}· finished {{ node_command.finished_at|date:"H:i:s" }}{% endif %}
+                      </span>
+                    </div>
+                    {% if node_command.error_message %}
+                      <p class="mt-1 text-sm break-words text-red-700 dark:text-red-300">{{ node_command.error_message }}</p>
+                    {% endif %}
+                    {% if node_command.state == "running" or node_command.state == "pending" %}
+                      {% if not dashboard.worker_is_online %}
+                        <p class="mt-1 text-sm text-slate-600 dark:text-slate-400">Waiting for the relay worker, which is offline.</p>
+                      {% elif node_command.state == "running" and displayed_command.displayed_steps %}
+                        <div class="mt-3">
+                          {% include "panel/includes/progress_steps.html" with displayed_steps=displayed_command.displayed_steps %}
+                        </div>
+                      {% endif %}
+                    {% endif %}
+                  </li>
+                {% endwith %}
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="empty-state">No command has been sent to the node yet.</p>
+          {% endif %}
+        </section>
+      {% endwith %}
+    </div>
+  {% endpartialdef %}
+  <section class="card mt-6" aria-labelledby="actions-card-title">
+    <div class="card-header">
+      <h2 id="actions-card-title" class="card-title">
+        {% heroicon_outline "bolt" class="size-5 text-slate-500" %}
+        Actions
+      </h2>
+    </div>
+    <div class="card-body space-y-5">
+      {% with availability=dashboard.node_action_availability %}
+        {% if not availability.relay_actions_are_available %}
+          <p id="node-actions-unavailable-reason"
+             class="text-sm text-slate-600 dark:text-slate-400">{{ availability.relay_action_unavailable_reason }}</p>
+        {% endif %}
+        <div class="flex flex-wrap gap-2">
+          <form method="post" action="{% url 'panel:node_send_advert' %}">
+            {% csrf_token %}
+            <input type="hidden" name="flood" value="0">
+            <button type="submit"
+                    class="button button-secondary"
+                    {% if not availability.relay_actions_are_available %}disabled aria-describedby="node-actions-unavailable-reason"{% endif %}>
+              {% heroicon_outline "megaphone" class="size-4" %}
+              Send advert (zero-hop)
+            </button>
+          </form>
+          <form method="post" action="{% url 'panel:node_send_advert' %}">
+            {% csrf_token %}
+            <input type="hidden" name="flood" value="1">
+            <button type="submit"
+                    class="button button-secondary"
+                    {% if not availability.relay_actions_are_available %}disabled aria-describedby="node-actions-unavailable-reason"{% endif %}>
+              {% heroicon_outline "megaphone" class="size-4" %}
+              Send advert (flood)
+            </button>
+          </form>
+          <form method="post" action="{% url 'panel:node_regenerate_card' %}">
+            {% csrf_token %}
+            <button type="submit"
+                    class="button button-secondary"
+                    {% if not availability.relay_actions_are_available %}disabled aria-describedby="node-actions-unavailable-reason"{% endif %}>
+              {% heroicon_outline "qr-code" class="size-4" %}
+              Regenerate contact card
+            </button>
+          </form>
+          <form method="post" action="{% url 'panel:node_sync_contacts' %}">
+            {% csrf_token %}
+            <button type="submit"
+                    class="button button-secondary"
+                    {% if not availability.relay_actions_are_available %}disabled aria-describedby="node-actions-unavailable-reason"{% endif %}>
+              {% heroicon_outline "arrow-path" class="size-4" %}
+              Sync contacts now
+            </button>
+          </form>
+          <form method="post" action="{% url 'panel:node_reapply_settings' %}">
+            {% csrf_token %}
+            <button type="submit"
+                    class="button button-secondary"
+                    {% if not availability.relay_actions_are_available %}disabled aria-describedby="node-actions-unavailable-reason"{% endif %}>
+              {% heroicon_outline "adjustments-horizontal" class="size-4" %}
+              Re-apply configured settings
+            </button>
+          </form>
+          <button type="button"
+                  class="button button-secondary"
+                  commandfor="reboot-dialog"
+                  command="show-modal"
+                  {% if not availability.reboot_is_available %}disabled aria-describedby="node-actions-unavailable-reason"{% endif %}>
+            {% heroicon_outline "power" class="size-4" %}
+            Reboot node…
+          </button>
+        </div>
+      {% endwith %}
+      <div class="rounded-lg border border-red-200 p-4 dark:border-red-900">
+        <h3 class="text-sm font-semibold text-red-700 dark:text-red-300">Danger zone</h3>
+        <div class="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p class="text-sm text-slate-600 dark:text-slate-400">
+            {% if dashboard.identity_backup.is_restorable %}
+              Reconfiguring factory resets the node. The relay's identity is backed up, so the node can get it back and users need to do nothing.
+            {% else %}
+              Reconfiguring factory resets the node: it gets a new identity and every user must add the new contact card.
+            {% endif %}
+          </p>
+          <button type="button"
+                  class="button button-danger"
+                  commandfor="reconfigure-dialog"
+                  command="show-modal">Reconfigure node…</button>
+        </div>
+      </div>
+    </div>
+  </section>
+  <dialog id="reboot-dialog"
+          class="dialog"
+          aria-labelledby="reboot-dialog-title">
+    <form method="post" action="{% url 'panel:node_reboot' %}">
+      {% csrf_token %}
+      <div class="dialog-body">
+        <h2 id="reboot-dialog-title" class="text-lg font-semibold">Reboot the node?</h2>
+        <p class="text-sm text-slate-700 dark:text-slate-300">
+          The worker first receives the messages waiting on the node and waits until no packet awaits a firmware acknowledgement. The node is then away for up to a minute; deliveries continue afterwards.
+        </p>
+      </div>
+      <div class="dialog-actions">
+        <button type="button"
+                class="button button-secondary"
+                commandfor="reboot-dialog"
+                command="close">Cancel</button>
+        <button type="submit" class="button button-danger">Reboot</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="reconfigure-dialog"
+          class="dialog"
+          aria-labelledby="reconfigure-dialog-title">
+    <form method="post" action="{% url 'panel:node_reconfigure' %}">
+      {% csrf_token %}
+      <div class="dialog-body">
+        <h2 id="reconfigure-dialog-title" class="text-lg font-semibold">Reconfigure the node?</h2>
+        <p class="text-sm text-slate-700 dark:text-slate-300">
+          {% if dashboard.identity_backup.is_restorable %}
+            This starts the setup wizard. Nothing changes until you confirm the factory reset there. The relay's identity is backed up: keep it in the configuration step, and the reset node, or a replacement board, gets the relay's key back, so <strong>users need to do nothing</strong>. The relay keeps delivering until you confirm the factory reset, and delivers nothing from then until setup is completed.
+          {% else %}
+            This starts the setup wizard. Nothing changes until you confirm the factory reset there, but after it the node has a new identity and <strong>every user must add the new contact card</strong>. The relay keeps delivering until you confirm the factory reset, and delivers nothing from then until setup is completed.
+          {% endif %}
+        </p>
+      </div>
+      <div class="dialog-actions">
+        <button type="button"
+                class="button button-secondary"
+                commandfor="reconfigure-dialog"
+                command="close">Cancel</button>
+        <button type="submit" class="button button-danger">Start the setup wizard</button>
+      </div>
+    </form>
+  </dialog>
+{% endblock content %}

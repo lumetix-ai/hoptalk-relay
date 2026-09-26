@@ -1,0 +1,11 @@
+tools = ["claude-code"]
+max_files_to_validate = 10000
+locale = "en"
+
+[rules]
+disabled_rules = []
+
+[tool_versions]
+# Pinning any value satisfies rule VER-001; agnix 0.48.0 never reads the version itself.
+# An exact version would need a bump on every Claude Code release without changing a single check.
+claude_code = "*"

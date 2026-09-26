@@ -47,13 +47,15 @@ or extract a well-named function; add a comment only if that still is not enough
   external constraint, a workaround for a third-party bug, a non-obvious reason
   behind a decision, or behavior that would surprise the reader.
 - Never restate what the code already says (`# increment the counter`,
-  `# loop over users`, `# return the result`).
+  `# loop over users`, `# return the result`); instead, rename the symbol or
+  extract a well-named variable or function until the code says it.
 - The same applies to docstrings: no docstring that only repeats the function
   name, parameters or types. Write one only when the contract is not obvious
   from the name and signature.
-- Never reference the agent's work in code: no mentions of tasks, steps,
-  iterations, requests, reviews or previous versions (`# Step 2: ...`,
-  `# Added for the retry task`, `# Fixed as requested`, `# New implementation`).
-  Change history belongs in commit messages, not in the code.
-- Do not leave commented-out code.
+- Describe the code as it stands instead of the agent's work on it: leave out
+  tasks, steps, iterations, requests, reviews and previous versions
+  (`# Step 2: ...`, `# Added for the retry task`, `# Fixed as requested`,
+  `# New implementation`). Change history belongs in the commit message.
+- Delete code that is no longer needed instead of commenting it out; version
+  control keeps the old version.
 - When changing code, update or delete the comments it makes wrong.

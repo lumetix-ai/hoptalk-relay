@@ -1,0 +1,1561 @@
+{
+  "description": "Direct message texts and what a strict parser makes of them. result.kind is message (with message_type and fields), syntax_error (with request_type, the letter after 'HT1 ' or '?', and correlation_fields, the leading usernames, ids or refresh targets that parsed), unsupported_version, unknown_message_type or other_text. value_rule_error names the rule a well-formed request breaks. error_reply is the error the server answers because of the text itself (for a part's value rule, once the device is signed in and the recipient exists); null means the text earns no error reply. A K case with acknowledged_message_part_count says whether the server ignores it for a message of that many parts.",
+  "generated_by": "src/tests/protocol/shared_vectors.py; do not edit by hand, regenerate with: make --directory=src container-execute command=\"python -m tests.protocol.shared_vectors\"",
+  "field_notes": "Field names are those of the server's message types. message_id is a string of decimal digits, because a 16-digit id can exceed 2^53, the largest integer that many JSON decoders keep exactly; every other number is a JSON number.",
+  "cases": [
+    {
+      "description": "A valid single-part message with Cyrillic text",
+      "text": "HT1 M Bob 1790294400123456 1/1 Привет, Боб!",
+      "utf8_byte_length": 52,
+      "result": {
+        "kind": "message",
+        "message_type": "M",
+        "fields": {
+          "recipient_username": "Bob",
+          "message_id": "1790294400123456",
+          "part_number": 1,
+          "part_count": 1,
+          "part_text": "Привет, Боб!"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "A leading zero in the message id is a syntax error; the reference needs both peer and id",
+      "text": "HT1 M Bob 01 1/1 x",
+      "utf8_byte_length": 18,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "M",
+        "correlation_fields": [
+          "Bob"
+        ]
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX M"
+    },
+    {
+      "description": "Part number above part count is a value error, not a syntax error",
+      "text": "HT1 M Bob 5 2/1 x",
+      "utf8_byte_length": 17,
+      "result": {
+        "kind": "message",
+        "message_type": "M",
+        "fields": {
+          "recipient_username": "Bob",
+          "message_id": "5",
+          "part_number": 2,
+          "part_count": 1,
+          "part_text": "x"
+        }
+      },
+      "value_rule_error": "PART_INVALID",
+      "error_reply": "HT1 e PART_INVALID M Bob 5"
+    },
+    {
+      "description": "Part count above 10 is a value error",
+      "text": "HT1 M Bob 5 1/11 x",
+      "utf8_byte_length": 18,
+      "result": {
+        "kind": "message",
+        "message_type": "M",
+        "fields": {
+          "recipient_username": "Bob",
+          "message_id": "5",
+          "part_number": 1,
+          "part_count": 11,
+          "part_text": "x"
+        }
+      },
+      "value_rule_error": "PART_INVALID",
+      "error_reply": "HT1 e PART_INVALID M Bob 5"
+    },
+    {
+      "description": "An empty part text is a value error",
+      "text": "HT1 M Bob 5 1/1 ",
+      "utf8_byte_length": 16,
+      "result": {
+        "kind": "message",
+        "message_type": "M",
+        "fields": {
+          "recipient_username": "Bob",
+          "message_id": "5",
+          "part_number": 1,
+          "part_count": 1,
+          "part_text": ""
+        }
+      },
+      "value_rule_error": "PART_INVALID",
+      "error_reply": "HT1 e PART_INVALID M Bob 5"
+    },
+    {
+      "description": "A three-digit part count is a syntax error",
+      "text": "HT1 M Bob 5 1/100 x",
+      "utf8_byte_length": 19,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "M",
+        "correlation_fields": [
+          "Bob",
+          "5"
+        ]
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX M Bob 5"
+    },
+    {
+      "description": "A two-character username is a syntax error",
+      "text": "HT1 A ab hunter2222",
+      "utf8_byte_length": 19,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "A",
+        "correlation_fields": []
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX A"
+    },
+    {
+      "description": "A 5-character password is a value error",
+      "text": "HT1 A bob short",
+      "utf8_byte_length": 15,
+      "result": {
+        "kind": "message",
+        "message_type": "A",
+        "fields": {
+          "username": "bob",
+          "password": "short"
+        }
+      },
+      "value_rule_error": "PASSWORD_INVALID",
+      "error_reply": "HT1 e PASSWORD_INVALID A bob"
+    },
+    {
+      "description": "Two spaces after HT1: no type letter",
+      "text": "HT1  Q bob",
+      "utf8_byte_length": 10,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "?",
+        "correlation_fields": []
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX ?"
+    },
+    {
+      "description": "A delivery acknowledgement whose set length differs from the part count is ignored",
+      "text": "HT1 K ivan 5 11",
+      "utf8_byte_length": 15,
+      "result": {
+        "kind": "message",
+        "message_type": "K",
+        "fields": {
+          "sender_username": "ivan",
+          "message_id": "5",
+          "received_set": "11"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null,
+      "acknowledged_message_part_count": 3,
+      "acknowledgement_ignored": true
+    },
+    {
+      "description": "A request in protocol version 2",
+      "text": "HT2 Q bob",
+      "utf8_byte_length": 9,
+      "result": {
+        "kind": "unsupported_version",
+        "version": "2",
+        "next_character": "Q"
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e VERSION ? 2"
+    },
+    {
+      "description": "An unknown upper-case type letter",
+      "text": "HT1 X foo",
+      "utf8_byte_length": 9,
+      "result": {
+        "kind": "unknown_message_type",
+        "message_type_letter": "X"
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e UNSUPPORTED X"
+    },
+    {
+      "description": "Other text is not protocol traffic and is never answered",
+      "text": "hello",
+      "utf8_byte_length": 5,
+      "result": {
+        "kind": "other_text"
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "A with spaces inside the password",
+      "text": "HT1 A ivan correct horse battery",
+      "utf8_byte_length": 32,
+      "result": {
+        "kind": "message",
+        "message_type": "A",
+        "fields": {
+          "username": "ivan",
+          "password": "correct horse battery"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "A keeps the username's case as sent",
+      "text": "HT1 A IVAN correct horse batterx",
+      "utf8_byte_length": 32,
+      "result": {
+        "kind": "message",
+        "message_type": "A",
+        "fields": {
+          "username": "IVAN",
+          "password": "correct horse batterx"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "Q",
+      "text": "HT1 Q bob",
+      "utf8_byte_length": 9,
+      "result": {
+        "kind": "message",
+        "message_type": "Q",
+        "fields": {
+          "username": "bob"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "Q with a three-character username of digits",
+      "text": "HT1 Q 123",
+      "utf8_byte_length": 9,
+      "result": {
+        "kind": "message",
+        "message_type": "Q",
+        "fields": {
+          "username": "123"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "Q with a 16-character username",
+      "text": "HT1 Q KonstantinIvanov",
+      "utf8_byte_length": 22,
+      "result": {
+        "kind": "message",
+        "message_type": "Q",
+        "fields": {
+          "username": "KonstantinIvanov"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "M, the largest message id and part 10 of 10",
+      "text": "HT1 M bob 9999999999999999 10/10 last part",
+      "utf8_byte_length": 42,
+      "result": {
+        "kind": "message",
+        "message_type": "M",
+        "fields": {
+          "recipient_username": "bob",
+          "message_id": "9999999999999999",
+          "part_number": 10,
+          "part_count": 10,
+          "part_text": "last part"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "M keeps the part text verbatim, trailing space included",
+      "text": "HT1 M bob 2 1/2 Hello ",
+      "utf8_byte_length": 22,
+      "result": {
+        "kind": "message",
+        "message_type": "M",
+        "fields": {
+          "recipient_username": "bob",
+          "message_id": "2",
+          "part_number": 1,
+          "part_count": 2,
+          "part_text": "Hello "
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "M: a second space before the part text belongs to the text",
+      "text": "HT1 M bob 2 2/2  again ",
+      "utf8_byte_length": 23,
+      "result": {
+        "kind": "message",
+        "message_type": "M",
+        "fields": {
+          "recipient_username": "bob",
+          "message_id": "2",
+          "part_number": 2,
+          "part_count": 2,
+          "part_text": " again "
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "M: a part text may look like a protocol message",
+      "text": "HT1 M Bob 5 1/1 HT1 M Bob 6 1/1 x",
+      "utf8_byte_length": 33,
+      "result": {
+        "kind": "message",
+        "message_type": "M",
+        "fields": {
+          "recipient_username": "Bob",
+          "message_id": "5",
+          "part_number": 1,
+          "part_count": 1,
+          "part_text": "HT1 M Bob 6 1/1 x"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "M: tab and line feed are allowed in a part text",
+      "text": "HT1 M Bob 5 1/1 line one\n\tline two",
+      "utf8_byte_length": 34,
+      "result": {
+        "kind": "message",
+        "message_type": "M",
+        "fields": {
+          "recipient_username": "Bob",
+          "message_id": "5",
+          "part_number": 1,
+          "part_count": 1,
+          "part_text": "line one\n\tline two"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "M: a part text of exactly 104 bytes",
+      "text": "HT1 M Bob 5 1/1 😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+      "utf8_byte_length": 120,
+      "result": {
+        "kind": "message",
+        "message_type": "M",
+        "fields": {
+          "recipient_username": "Bob",
+          "message_id": "5",
+          "part_number": 1,
+          "part_count": 1,
+          "part_text": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "M: a part text of 105 bytes is a value error, not a syntax error",
+      "text": "HT1 M Bob 5 1/1 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "utf8_byte_length": 121,
+      "result": {
+        "kind": "message",
+        "message_type": "M",
+        "fields": {
+          "recipient_username": "Bob",
+          "message_id": "5",
+          "part_number": 1,
+          "part_count": 1,
+          "part_text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "value_rule_error": "PART_INVALID",
+      "error_reply": "HT1 e PART_INVALID M Bob 5"
+    },
+    {
+      "description": "M: a carriage return in a part text is a value error",
+      "text": "HT1 M Bob 5 1/1 a\rb",
+      "utf8_byte_length": 19,
+      "result": {
+        "kind": "message",
+        "message_type": "M",
+        "fields": {
+          "recipient_username": "Bob",
+          "message_id": "5",
+          "part_number": 1,
+          "part_count": 1,
+          "part_text": "a\rb"
+        }
+      },
+      "value_rule_error": "PART_INVALID",
+      "error_reply": "HT1 e PART_INVALID M Bob 5"
+    },
+    {
+      "description": "M: part 99 of 99 has the right shape but breaks the part range",
+      "text": "HT1 M Bob 5 99/99 x",
+      "utf8_byte_length": 19,
+      "result": {
+        "kind": "message",
+        "message_type": "M",
+        "fields": {
+          "recipient_username": "Bob",
+          "message_id": "5",
+          "part_number": 99,
+          "part_count": 99,
+          "part_text": "x"
+        }
+      },
+      "value_rule_error": "PART_INVALID",
+      "error_reply": "HT1 e PART_INVALID M Bob 5"
+    },
+    {
+      "description": "K with a complete three-part set",
+      "text": "HT1 K ivan 1790294400123457 111",
+      "utf8_byte_length": 31,
+      "result": {
+        "kind": "message",
+        "message_type": "K",
+        "fields": {
+          "sender_username": "ivan",
+          "message_id": "1790294400123457",
+          "received_set": "111"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null,
+      "acknowledged_message_part_count": 3,
+      "acknowledgement_ignored": false
+    },
+    {
+      "description": "R",
+      "text": "HT1 R ivan 1790294400123456",
+      "utf8_byte_length": 27,
+      "result": {
+        "kind": "message",
+        "message_type": "R",
+        "fields": {
+          "sender_username": "ivan",
+          "message_id": "1790294400123456"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "C for a read receipt",
+      "text": "HT1 C Bob 1790294400123456 R",
+      "utf8_byte_length": 28,
+      "result": {
+        "kind": "message",
+        "message_type": "C",
+        "fields": {
+          "recipient_username": "Bob",
+          "message_id": "1790294400123456",
+          "receipt_level": "R"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "F for one conversation",
+      "text": "HT1 F ivan",
+      "utf8_byte_length": 10,
+      "result": {
+        "kind": "message",
+        "message_type": "F",
+        "fields": {
+          "refresh_target": "ivan"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "F * for every conversation",
+      "text": "HT1 F *",
+      "utf8_byte_length": 7,
+      "result": {
+        "kind": "message",
+        "message_type": "F",
+        "fields": {
+          "refresh_target": "*"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "A 7-character password is a value error",
+      "text": "HT1 A bob hunter2",
+      "utf8_byte_length": 17,
+      "result": {
+        "kind": "message",
+        "message_type": "A",
+        "fields": {
+          "username": "bob",
+          "password": "hunter2"
+        }
+      },
+      "value_rule_error": "PASSWORD_INVALID",
+      "error_reply": "HT1 e PASSWORD_INVALID A bob"
+    },
+    {
+      "description": "A control character in a password is a value error",
+      "text": "HT1 A bob hunter\u00012222",
+      "utf8_byte_length": 21,
+      "result": {
+        "kind": "message",
+        "message_type": "A",
+        "fields": {
+          "username": "bob",
+          "password": "hunter\u00012222"
+        }
+      },
+      "value_rule_error": "PASSWORD_INVALID",
+      "error_reply": "HT1 e PASSWORD_INVALID A bob"
+    },
+    {
+      "description": "An empty password is well-formed and breaks the password rules",
+      "text": "HT1 A bob ",
+      "utf8_byte_length": 10,
+      "result": {
+        "kind": "message",
+        "message_type": "A",
+        "fields": {
+          "username": "bob",
+          "password": ""
+        }
+      },
+      "value_rule_error": "PASSWORD_INVALID",
+      "error_reply": "HT1 e PASSWORD_INVALID A bob"
+    },
+    {
+      "description": "A second space before the password belongs to it, and a leading space is not allowed",
+      "text": "HT1 A bob  hunter2222",
+      "utf8_byte_length": 21,
+      "result": {
+        "kind": "message",
+        "message_type": "A",
+        "fields": {
+          "username": "bob",
+          "password": " hunter2222"
+        }
+      },
+      "value_rule_error": "PASSWORD_INVALID",
+      "error_reply": "HT1 e PASSWORD_INVALID A bob"
+    },
+    {
+      "description": "A trailing space in a password is not allowed",
+      "text": "HT1 A bob hunter2222 ",
+      "utf8_byte_length": 21,
+      "result": {
+        "kind": "message",
+        "message_type": "A",
+        "fields": {
+          "username": "bob",
+          "password": "hunter2222 "
+        }
+      },
+      "value_rule_error": "PASSWORD_INVALID",
+      "error_reply": "HT1 e PASSWORD_INVALID A bob"
+    },
+    {
+      "description": "32 Cyrillic letters (64 bytes) are the longest Cyrillic password",
+      "text": "HT1 A bob парольпарольпарольпарольпарольда",
+      "utf8_byte_length": 74,
+      "result": {
+        "kind": "message",
+        "message_type": "A",
+        "fields": {
+          "username": "bob",
+          "password": "парольпарольпарольпарольпарольда"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "33 Cyrillic letters (66 bytes) exceed the 64-byte password limit",
+      "text": "HT1 A bob парольпарольпарольпарольпарольдаа",
+      "utf8_byte_length": 76,
+      "result": {
+        "kind": "message",
+        "message_type": "A",
+        "fields": {
+          "username": "bob",
+          "password": "парольпарольпарольпарольпарольдаа"
+        }
+      },
+      "value_rule_error": "PASSWORD_INVALID",
+      "error_reply": "HT1 e PASSWORD_INVALID A bob"
+    },
+    {
+      "description": "8 decomposed e-acute letters (16 code points) are 8 characters after NFC: valid",
+      "text": "HT1 A bob éééééééé",
+      "utf8_byte_length": 34,
+      "result": {
+        "kind": "message",
+        "message_type": "A",
+        "fields": {
+          "username": "bob",
+          "password": "éééééééé"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "7 decomposed e-acute letters (14 code points) are 7 characters after NFC: too short",
+      "text": "HT1 A bob ééééééé",
+      "utf8_byte_length": 31,
+      "result": {
+        "kind": "message",
+        "message_type": "A",
+        "fields": {
+          "username": "bob",
+          "password": "ééééééé"
+        }
+      },
+      "value_rule_error": "PASSWORD_INVALID",
+      "error_reply": "HT1 e PASSWORD_INVALID A bob"
+    },
+    {
+      "description": "Password characters are Unicode scalar values after NFC, not grapheme clusters: 4 letters with a combining low line (which NFC cannot compose) are 8 characters, so the password is valid",
+      "text": "HT1 A bob a̲a̲a̲a̲",
+      "utf8_byte_length": 22,
+      "result": {
+        "kind": "message",
+        "message_type": "A",
+        "fields": {
+          "username": "bob",
+          "password": "a̲a̲a̲a̲"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "Two spaces between the type letter and the username",
+      "text": "HT1 Q  bob",
+      "utf8_byte_length": 10,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "Q",
+        "correlation_fields": []
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX Q"
+    },
+    {
+      "description": "Two spaces between the username and the message id",
+      "text": "HT1 R ivan  5",
+      "utf8_byte_length": 13,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "R",
+        "correlation_fields": [
+          "ivan"
+        ]
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX R"
+    },
+    {
+      "description": "Two spaces before the part field",
+      "text": "HT1 M Bob 5  1/1 x",
+      "utf8_byte_length": 18,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "M",
+        "correlation_fields": [
+          "Bob",
+          "5"
+        ]
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX M Bob 5"
+    },
+    {
+      "description": "A tab instead of the space after the type letter",
+      "text": "HT1 Q\tbob",
+      "utf8_byte_length": 9,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "Q",
+        "correlation_fields": []
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX Q"
+    },
+    {
+      "description": "A tab between two fields",
+      "text": "HT1 R ivan\t5",
+      "utf8_byte_length": 12,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "R",
+        "correlation_fields": []
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX R"
+    },
+    {
+      "description": "A leading zero in the part number",
+      "text": "HT1 M Bob 5 01/1 x",
+      "utf8_byte_length": 18,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "M",
+        "correlation_fields": [
+          "Bob",
+          "5"
+        ]
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX M Bob 5"
+    },
+    {
+      "description": "A three-digit part number",
+      "text": "HT1 M Bob 5 100/1 x",
+      "utf8_byte_length": 19,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "M",
+        "correlation_fields": [
+          "Bob",
+          "5"
+        ]
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX M Bob 5"
+    },
+    {
+      "description": "Part number 0",
+      "text": "HT1 M Bob 5 0/1 x",
+      "utf8_byte_length": 17,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "M",
+        "correlation_fields": [
+          "Bob",
+          "5"
+        ]
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX M Bob 5"
+    },
+    {
+      "description": "An M without its part text",
+      "text": "HT1 M Bob 5 1/1",
+      "utf8_byte_length": 15,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "M",
+        "correlation_fields": [
+          "Bob",
+          "5"
+        ]
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX M Bob 5"
+    },
+    {
+      "description": "NUL in a part text breaks the grammar",
+      "text": "HT1 M Bob 5 1/1 a\u0000b",
+      "utf8_byte_length": 19,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "M",
+        "correlation_fields": [
+          "Bob",
+          "5"
+        ]
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX M Bob 5"
+    },
+    {
+      "description": "A 17-digit message id",
+      "text": "HT1 R ivan 12345678901234567",
+      "utf8_byte_length": 28,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "R",
+        "correlation_fields": [
+          "ivan"
+        ]
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX R"
+    },
+    {
+      "description": "Message id 0",
+      "text": "HT1 R ivan 0",
+      "utf8_byte_length": 12,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "R",
+        "correlation_fields": [
+          "ivan"
+        ]
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX R"
+    },
+    {
+      "description": "A 17-character username",
+      "text": "HT1 Q KonstantinIvanova",
+      "utf8_byte_length": 23,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "Q",
+        "correlation_fields": []
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX Q"
+    },
+    {
+      "description": "A Cyrillic username",
+      "text": "HT1 Q Иван",
+      "utf8_byte_length": 14,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "Q",
+        "correlation_fields": []
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX Q"
+    },
+    {
+      "description": "A username with an accented letter",
+      "text": "HT1 A José hunter2222",
+      "utf8_byte_length": 22,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "A",
+        "correlation_fields": []
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX A"
+    },
+    {
+      "description": "A username with an underscore",
+      "text": "HT1 Q bob_1",
+      "utf8_byte_length": 11,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "Q",
+        "correlation_fields": []
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX Q"
+    },
+    {
+      "description": "A username in full-width letters",
+      "text": "HT1 Q ｂｏｂ",
+      "utf8_byte_length": 15,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "Q",
+        "correlation_fields": []
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX Q"
+    },
+    {
+      "description": "A trailing space after the last field of a type without a tail",
+      "text": "HT1 Q bob ",
+      "utf8_byte_length": 10,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "Q",
+        "correlation_fields": [
+          "bob"
+        ]
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX Q bob"
+    },
+    {
+      "description": "A line feed after the username",
+      "text": "HT1 Q bob\n",
+      "utf8_byte_length": 10,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "Q",
+        "correlation_fields": []
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX Q"
+    },
+    {
+      "description": "An extra field",
+      "text": "HT1 R ivan 5 extra",
+      "utf8_byte_length": 18,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "R",
+        "correlation_fields": [
+          "ivan",
+          "5"
+        ]
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX R ivan 5"
+    },
+    {
+      "description": "A missing field",
+      "text": "HT1 R ivan",
+      "utf8_byte_length": 10,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "R",
+        "correlation_fields": [
+          "ivan"
+        ]
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX R"
+    },
+    {
+      "description": "An A without its password",
+      "text": "HT1 A bob",
+      "utf8_byte_length": 9,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "A",
+        "correlation_fields": [
+          "bob"
+        ]
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX A bob"
+    },
+    {
+      "description": "A type letter without fields",
+      "text": "HT1 Q",
+      "utf8_byte_length": 5,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "Q",
+        "correlation_fields": []
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX Q"
+    },
+    {
+      "description": "A type letter followed by a field without a space",
+      "text": "HT1 Qbob",
+      "utf8_byte_length": 8,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "Q",
+        "correlation_fields": []
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX Q"
+    },
+    {
+      "description": "F with an extra field after *",
+      "text": "HT1 F * bob",
+      "utf8_byte_length": 11,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "F",
+        "correlation_fields": [
+          "*"
+        ]
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX F *"
+    },
+    {
+      "description": "F with a target that is neither a username nor *",
+      "text": "HT1 F **",
+      "utf8_byte_length": 8,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "F",
+        "correlation_fields": []
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX F"
+    },
+    {
+      "description": "A received-set with a character other than 0 and 1: a malformed acknowledgement is not answered",
+      "text": "HT1 K ivan 5 12",
+      "utf8_byte_length": 15,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "K",
+        "correlation_fields": [
+          "ivan",
+          "5"
+        ]
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "An 11-character received-set",
+      "text": "HT1 K ivan 5 11111111111",
+      "utf8_byte_length": 24,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "K",
+        "correlation_fields": [
+          "ivan",
+          "5"
+        ]
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "A receipt level other than D and R",
+      "text": "HT1 C Bob 5 X",
+      "utf8_byte_length": 13,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "C",
+        "correlation_fields": [
+          "Bob",
+          "5"
+        ]
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "A lower-case receipt level",
+      "text": "HT1 C Bob 5 d",
+      "utf8_byte_length": 13,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "C",
+        "correlation_fields": [
+          "Bob",
+          "5"
+        ]
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "Nothing after HT1 and its space",
+      "text": "HT1 ",
+      "utf8_byte_length": 4,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "?",
+        "correlation_fields": []
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX ?"
+    },
+    {
+      "description": "A digit where the type letter belongs",
+      "text": "HT1 5 x",
+      "utf8_byte_length": 7,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "?",
+        "correlation_fields": []
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX ?"
+    },
+    {
+      "description": "A non-ASCII letter where the type letter belongs",
+      "text": "HT1 Ж x",
+      "utf8_byte_length": 8,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "?",
+        "correlation_fields": []
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e SYNTAX ?"
+    },
+    {
+      "description": "An unknown upper-case letter without fields",
+      "text": "HT1 Z",
+      "utf8_byte_length": 5,
+      "result": {
+        "kind": "unknown_message_type",
+        "message_type_letter": "Z"
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e UNSUPPORTED Z"
+    },
+    {
+      "description": "An unknown lower-case letter is a newer server type: never answered",
+      "text": "HT1 x foo",
+      "utf8_byte_length": 9,
+      "result": {
+        "kind": "unknown_message_type",
+        "message_type_letter": "x"
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "A request in protocol version 10",
+      "text": "HT10 Q bob",
+      "utf8_byte_length": 10,
+      "result": {
+        "kind": "unsupported_version",
+        "version": "10",
+        "next_character": "Q"
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e VERSION ? 10"
+    },
+    {
+      "description": "A request in protocol version 123",
+      "text": "HT123 A bob hunter2222",
+      "utf8_byte_length": 22,
+      "result": {
+        "kind": "unsupported_version",
+        "version": "123",
+        "next_character": "A"
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e VERSION ? 123"
+    },
+    {
+      "description": "Version 01 is not version 1",
+      "text": "HT01 Q bob",
+      "utf8_byte_length": 10,
+      "result": {
+        "kind": "unsupported_version",
+        "version": "01",
+        "next_character": "Q"
+      },
+      "value_rule_error": null,
+      "error_reply": "HT1 e VERSION ? 01"
+    },
+    {
+      "description": "A server type in another version is never answered",
+      "text": "HT2 q bob 1",
+      "utf8_byte_length": 11,
+      "result": {
+        "kind": "unsupported_version",
+        "version": "2",
+        "next_character": "q"
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "Nothing after another version is never answered",
+      "text": "HT2 ",
+      "utf8_byte_length": 4,
+      "result": {
+        "kind": "unsupported_version",
+        "version": "2",
+        "next_character": ""
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "Four version digits are not protocol traffic",
+      "text": "HT1234 Q bob",
+      "utf8_byte_length": 12,
+      "result": {
+        "kind": "other_text"
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "A letter instead of the version digits is not protocol traffic",
+      "text": "HTX Q bob",
+      "utf8_byte_length": 9,
+      "result": {
+        "kind": "other_text"
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "HT1 without a space is not protocol traffic",
+      "text": "HT1",
+      "utf8_byte_length": 3,
+      "result": {
+        "kind": "other_text"
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "HT1 followed by the type letter without a space is not protocol traffic",
+      "text": "HT1Q bob",
+      "utf8_byte_length": 8,
+      "result": {
+        "kind": "other_text"
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "The magic HT is case-sensitive",
+      "text": "ht1 Q bob",
+      "utf8_byte_length": 9,
+      "result": {
+        "kind": "other_text"
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "A space before HT1 is not protocol traffic",
+      "text": " HT1 Q bob",
+      "utf8_byte_length": 10,
+      "result": {
+        "kind": "other_text"
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "An empty text is not protocol traffic",
+      "text": "",
+      "utf8_byte_length": 0,
+      "result": {
+        "kind": "other_text"
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "a",
+      "text": "HT1 a ivan",
+      "utf8_byte_length": 10,
+      "result": {
+        "kind": "message",
+        "message_type": "a",
+        "fields": {
+          "username": "ivan"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "q: the user exists",
+      "text": "HT1 q Bob 1",
+      "utf8_byte_length": 11,
+      "result": {
+        "kind": "message",
+        "message_type": "q",
+        "fields": {
+          "username": "Bob",
+          "user_exists": true
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "q: the user does not exist",
+      "text": "HT1 q carol 0",
+      "utf8_byte_length": 13,
+      "result": {
+        "kind": "message",
+        "message_type": "q",
+        "fields": {
+          "username": "carol",
+          "user_exists": false
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "k with a missing part",
+      "text": "HT1 k Bob 1790294400123457 101",
+      "utf8_byte_length": 30,
+      "result": {
+        "kind": "message",
+        "message_type": "k",
+        "fields": {
+          "recipient_username": "Bob",
+          "message_id": "1790294400123457",
+          "received_set": "101"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "m keeps the part text verbatim",
+      "text": "HT1 m ivan 1790294400123456 1/1 Привет, Боб!",
+      "utf8_byte_length": 53,
+      "result": {
+        "kind": "message",
+        "message_type": "m",
+        "fields": {
+          "sender_username": "ivan",
+          "message_id": "1790294400123456",
+          "part_number": 1,
+          "part_count": 1,
+          "part_text": "Привет, Боб!"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "r",
+      "text": "HT1 r ivan 1790294400123456",
+      "utf8_byte_length": 27,
+      "result": {
+        "kind": "message",
+        "message_type": "r",
+        "fields": {
+          "sender_username": "ivan",
+          "message_id": "1790294400123456"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "s for a delivered receipt",
+      "text": "HT1 s Bob 1790294400123456 D",
+      "utf8_byte_length": 28,
+      "result": {
+        "kind": "message",
+        "message_type": "s",
+        "fields": {
+          "recipient_username": "Bob",
+          "message_id": "1790294400123456",
+          "receipt_level": "D"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "f for one conversation",
+      "text": "HT1 f ivan 3",
+      "utf8_byte_length": 12,
+      "result": {
+        "kind": "message",
+        "message_type": "f",
+        "fields": {
+          "refresh_target": "ivan",
+          "message_count": 3
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "f * with nothing missing",
+      "text": "HT1 f * 0",
+      "utf8_byte_length": 9,
+      "result": {
+        "kind": "message",
+        "message_type": "f",
+        "fields": {
+          "refresh_target": "*",
+          "message_count": 0
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "e with an M reference",
+      "text": "HT1 e NO_SUCH_USER M carol 1790294400123457",
+      "utf8_byte_length": 43,
+      "result": {
+        "kind": "message",
+        "message_type": "e",
+        "fields": {
+          "error_code": "NO_SUCH_USER",
+          "request_type": "M",
+          "error_reference": "carol 1790294400123457"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "e without a reference",
+      "text": "HT1 e SYNTAX ?",
+      "utf8_byte_length": 14,
+      "result": {
+        "kind": "message",
+        "message_type": "e",
+        "fields": {
+          "error_code": "SYNTAX",
+          "request_type": "?",
+          "error_reference": null
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "e with a version reference",
+      "text": "HT1 e VERSION ? 2",
+      "utf8_byte_length": 17,
+      "result": {
+        "kind": "message",
+        "message_type": "e",
+        "fields": {
+          "error_code": "VERSION",
+          "request_type": "?",
+          "error_reference": "2"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "e with a refresh target reference",
+      "text": "HT1 e NOT_SIGNED_IN F *",
+      "utf8_byte_length": 23,
+      "result": {
+        "kind": "message",
+        "message_type": "e",
+        "fields": {
+          "error_code": "NOT_SIGNED_IN",
+          "request_type": "F",
+          "error_reference": "*"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "e with a code this version does not know: well-formed, and a client treats it as permanent",
+      "text": "HT1 e SERVER_BUSY Q bob",
+      "utf8_byte_length": 23,
+      "result": {
+        "kind": "message",
+        "message_type": "e",
+        "fields": {
+          "error_code": "SERVER_BUSY",
+          "request_type": "Q",
+          "error_reference": "bob"
+        }
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "e with a lower-case error code is malformed",
+      "text": "HT1 e syntax A bob",
+      "utf8_byte_length": 18,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "e",
+        "correlation_fields": []
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "e with a lower-case request type is malformed",
+      "text": "HT1 e SYNTAX a",
+      "utf8_byte_length": 14,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "e",
+        "correlation_fields": []
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "e without a request type is malformed",
+      "text": "HT1 e SYNTAX",
+      "utf8_byte_length": 12,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "e",
+        "correlation_fields": []
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "e with a trailing space is malformed",
+      "text": "HT1 e SYNTAX ? ",
+      "utf8_byte_length": 15,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "e",
+        "correlation_fields": []
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "e with a three-field reference is malformed",
+      "text": "HT1 e ID_CONFLICT M bob 5 x",
+      "utf8_byte_length": 27,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "e",
+        "correlation_fields": []
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "f with a count above 9999 is malformed",
+      "text": "HT1 f ivan 10000",
+      "utf8_byte_length": 16,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "f",
+        "correlation_fields": [
+          "ivan"
+        ]
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    },
+    {
+      "description": "q with an existence other than 1 and 0 is malformed",
+      "text": "HT1 q Bob yes",
+      "utf8_byte_length": 13,
+      "result": {
+        "kind": "syntax_error",
+        "request_type": "q",
+        "correlation_fields": [
+          "Bob"
+        ]
+      },
+      "value_rule_error": null,
+      "error_reply": null
+    }
+  ]
+}

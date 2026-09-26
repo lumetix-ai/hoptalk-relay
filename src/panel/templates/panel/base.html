@@ -1,0 +1,76 @@
+{% load static django_htmx heroicons panel_formatting %}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    {# htmx must not inject its inline indicator styles or evaluate code: the CSP allows neither. #}
+    <meta name="htmx-config"
+          content='{"includeIndicatorStyles": false, "allowEval": false}'>
+    <title>{% block title %}HopTalk Relay{% endblock title %}</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="{% static 'app.css' %}">
+    {% htmx_script %}
+    <script src="{% static 'confirmation_dialogs.js' %}" defer></script>
+    <script src="{% static 'copy_to_clipboard.js' %}" defer></script>
+    <script src="{% static 'pairing_countdown.js' %}" defer></script>
+    <script src="{% static 'polled_regions.js' %}" defer></script>
+  </head>
+  <body class="min-h-full bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100"
+        hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+    {% block page %}
+      <a href="#main-content"
+         class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:text-slate-900 focus:shadow dark:focus:bg-slate-800 dark:focus:text-white">Skip to content</a>
+      <header class="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
+        <nav class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-1 px-4 pt-3 sm:flex-nowrap sm:px-6 sm:py-3"
+             aria-label="Main">
+          <a href="{% url 'panel:root' %}"
+             class="flex items-center gap-2 font-semibold text-slate-900 dark:text-white">
+            {% heroicon_outline "signal" class="size-6 text-emerald-600 dark:text-emerald-400" %}
+            HopTalk Relay
+          </a>
+          <form method="post"
+                action="{% url 'panel:logout' %}"
+                class="ml-auto sm:order-last">
+            {% csrf_token %}
+            <button type="submit"
+                    class="flex items-center gap-1 rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white">
+              {% heroicon_outline "arrow-right-start-on-rectangle" class="size-5" %}
+              <span class="hidden sm:inline">Sign out</span>
+              <span class="sr-only sm:hidden">Sign out</span>
+            </button>
+          </form>
+          <ul class="-mx-1 flex w-full items-center gap-1 overflow-x-auto pb-2 text-sm [scrollbar-width:none] sm:mx-0 sm:w-auto sm:flex-1 sm:pb-0">
+            {% url 'panel:node_dashboard' as node_url %}
+            {% url 'panel:contacts' as contacts_url %}
+            {% url 'panel:users' as users_url %}
+            {% url 'panel:messages' as messages_url %}
+            {% include "panel/navigation_link.html" with link_url=node_url link_label="Node" icon_name="cpu-chip" %}
+            {% include "panel/navigation_link.html" with link_url=contacts_url link_label="Contacts" icon_name="identification" %}
+            {% include "panel/navigation_link.html" with link_url=users_url link_label="Users" icon_name="user-group" %}
+            {% include "panel/navigation_link.html" with link_url=messages_url link_label="Messages" icon_name="chat-bubble-left-right" %}
+          </ul>
+        </nav>
+      </header>
+      {# The banners of every page: worker offline, relay disconnected, identity mismatch, setup required and so on. #}
+      <div id="banner-region"
+           class="mx-auto max-w-7xl px-4 sm:px-6"
+           hx-get="{% url 'panel:banners' %}"
+           hx-trigger="load, every 5s"
+           hx-swap="innerHTML"
+           aria-live="polite"></div>
+      <main id="main-content" class="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+        {% if messages %}
+          <ul class="mb-6 space-y-2">
+            {% for message in messages %}
+              <li class="alert alert-{{ message.tags|alert_tone }}" role="status">{{ message }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+        {% block content %}
+        {% endblock content %}
+      </main>
+    {% endblock page %}
+  </body>
+</html>

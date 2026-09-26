@@ -1,0 +1,14 @@
+{% load panel_formatting %}
+{% with contact=deletion_summary.contact %}
+  <p class="text-sm text-slate-700 dark:text-slate-300">
+    Remove <strong>{{ contact.name|default:"the unnamed node" }}</strong> (<span class="font-mono">{{ contact.public_key|key_prefix }}</span>) from the node.
+    {% if deletion_summary.linked_username %}
+      It is a device of <strong>@{{ deletion_summary.linked_username }}</strong>: its {{ deletion_summary.pending_delivery_count }} pending deliver{{ deletion_summary.pending_delivery_count|pluralize:"y,ies" }} and {{ deletion_summary.pending_receipt_count }} pending receipt{{ deletion_summary.pending_receipt_count|pluralize }} are deleted{% if deletion_summary.active_refresh_session_count %}, and its {{ deletion_summary.active_refresh_session_count }} running refresh{{ deletion_summary.active_refresh_session_count|pluralize:"es" }} stop{{ deletion_summary.active_refresh_session_count|pluralize:"s," }}{% endif %}.
+    {% else %}
+      It is not linked to a user.
+    {% endif %}
+  </p>
+  <p class="mt-2 text-xs text-slate-500 dark:text-slate-400">
+    The traffic log keeps its messages under the contact's name. To use the relay again, the node has to be added again.
+  </p>
+{% endwith %}

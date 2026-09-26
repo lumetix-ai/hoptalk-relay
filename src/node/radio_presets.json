@@ -1,0 +1,241 @@
+{
+  "source_url": "https://api.meshcore.nz/api/v1/config",
+  "source_path": "config.suggested_radio_settings.entries",
+  "fetched_at": "2026-09-25T09:11:51Z",
+  "response_sha256": "a6e8e54d601d5195bf2dd846f319aaaad607c27234470f96cb961cf67a6eda01",
+  "entries_sha256": "f95ebcae18f31a9229ddfd88f176d17620fb3f7ecc011a01aded6eb05066adad",
+  "entries": [
+    {
+      "bandwidth": "250",
+      "coding_rate": "5",
+      "description": "915.800MHz / SF10 / BW250 / CR5",
+      "frequency": "915.800",
+      "spreading_factor": "10",
+      "title": "Australia"
+    },
+    {
+      "bandwidth": "62.5",
+      "coding_rate": "7",
+      "description": "916.575MHz / SF7 / BW62.5 / CR7",
+      "frequency": "916.575",
+      "spreading_factor": "7",
+      "title": "Australia (Narrow)"
+    },
+    {
+      "bandwidth": "125",
+      "coding_rate": "5",
+      "description": "915.075MHz / SF9 / BW125 / CR5",
+      "frequency": "915.075",
+      "spreading_factor": "9",
+      "title": "Australia (Mid)"
+    },
+    {
+      "bandwidth": "62.5",
+      "coding_rate": "8",
+      "description": "923.125MHz / SF8 / BW62.5 / CR8",
+      "frequency": "923.125",
+      "spreading_factor": "8",
+      "title": "Australia: SA, WA"
+    },
+    {
+      "bandwidth": "62.5",
+      "coding_rate": "5",
+      "description": "923.125MHz / SF8 / BW62.5 / CR5",
+      "frequency": "923.125",
+      "spreading_factor": "8",
+      "title": "Australia: QLD"
+    },
+    {
+      "bandwidth": "62.5",
+      "coding_rate": "8",
+      "description": "923.125MHz / SF8 / BW62.5 / CR8",
+      "frequency": "923.125",
+      "spreading_factor": "8",
+      "title": "Brazil"
+    },
+    {
+      "bandwidth": "62.5",
+      "coding_rate": "5",
+      "description": "910.525MHz / SF7 / BW62.5 / CR5 / 3B",
+      "frequency": "910.525",
+      "network_settings": {
+        "path_hash_size": 3
+      },
+      "spreading_factor": "7",
+      "title": "Canada"
+    },
+    {
+      "bandwidth": "125",
+      "coding_rate": "5",
+      "description": "910.525MHz / SF11 / BW125 / CR5",
+      "frequency": "910.525",
+      "spreading_factor": "11",
+      "title": "Costa Rica"
+    },
+    {
+      "bandwidth": "62.5",
+      "coding_rate": "8",
+      "description": "869.618MHz / SF8 / BW62.5 / CR8",
+      "frequency": "869.618",
+      "spreading_factor": "8",
+      "title": "EU/UK (Narrow)"
+    },
+    {
+      "bandwidth": "250",
+      "coding_rate": "5",
+      "description": "869.525MHz / SF11 / BW250 / CR5",
+      "frequency": "869.525",
+      "spreading_factor": "11",
+      "title": "EU/UK (Deprecated)"
+    },
+    {
+      "bandwidth": "62.5",
+      "coding_rate": "5",
+      "description": "869.432MHz / SF7 / BW62.5 / CR5 / 2B",
+      "frequency": "869.432",
+      "network_settings": {
+        "path_hash_size": 2
+      },
+      "spreading_factor": "7",
+      "title": "Czech Republic (Narrow)"
+    },
+    {
+      "bandwidth": "250",
+      "coding_rate": "5",
+      "description": "433.650MHz / SF11 / BW250 / CR5",
+      "frequency": "433.650",
+      "spreading_factor": "11",
+      "title": "EU 433MHz (Long Range)"
+    },
+    {
+      "bandwidth": "62.5",
+      "coding_rate": "8",
+      "description": "433.650MHz / SF8 / BW62.5 / CR8",
+      "frequency": "433.650",
+      "spreading_factor": "8",
+      "title": "EU 433MHz (Narrow)"
+    },
+    {
+      "bandwidth": "62.5",
+      "coding_rate": "5",
+      "description": "869.618MHz / SF7 / BW62.5 / CR5 / 2B",
+      "frequency": "869.618",
+      "network_settings": {
+        "path_hash_size": 2
+      },
+      "spreading_factor": "7",
+      "title": "Hungary"
+    },
+    {
+      "bandwidth": "62.5",
+      "coding_rate": "5",
+      "description": "869.618MHz / SF7 / BW62.5 / CR5",
+      "frequency": "869.618",
+      "spreading_factor": "7",
+      "title": "Netherlands"
+    },
+    {
+      "bandwidth": "62.5",
+      "coding_rate": "8",
+      "description": "869.618MHz / SF8 / BW62.5 / CR8 / 2B",
+      "frequency": "869.618",
+      "network_settings": {
+        "path_hash_size": 2
+      },
+      "spreading_factor": "8",
+      "title": "Netherlands (Limburg)"
+    },
+    {
+      "bandwidth": "62.5",
+      "coding_rate": "5",
+      "description": "917.375MHz / SF7 / BW62.5 / CR5 / 2B",
+      "frequency": "917.375",
+      "network_settings": {
+        "path_hash_size": 2
+      },
+      "spreading_factor": "7",
+      "title": "New Zealand (Narrow)"
+    },
+    {
+      "bandwidth": "250",
+      "coding_rate": "5",
+      "description": "917.375MHz / SF11 / BW250 / CR5 / 1B",
+      "frequency": "917.375",
+      "network_settings": {
+        "path_hash_size": 1
+      },
+      "spreading_factor": "11",
+      "title": "New Zealand (Gisborne)"
+    },
+    {
+      "bandwidth": "62.5",
+      "coding_rate": "6",
+      "description": "433.375MHz / SF9 / BW62.5 / CR6",
+      "frequency": "433.375",
+      "spreading_factor": "9",
+      "title": "Portugal 433"
+    },
+    {
+      "bandwidth": "62.5",
+      "coding_rate": "6",
+      "description": "869.618MHz / SF7 / BW62.5 / CR6",
+      "frequency": "869.618",
+      "spreading_factor": "7",
+      "title": "Portugal 868"
+    },
+    {
+      "bandwidth": "62.5",
+      "coding_rate": "5",
+      "description": "869.618MHz / SF7 / BW62.5 / CR5 / 2B",
+      "frequency": "869.618",
+      "network_settings": {
+        "path_hash_size": 2
+      },
+      "spreading_factor": "7",
+      "title": "Slovakia"
+    },
+    {
+      "bandwidth": "62.5",
+      "coding_rate": "8",
+      "description": "869.618MHz / SF8 / BW62.5 / CR8",
+      "frequency": "869.618",
+      "spreading_factor": "8",
+      "title": "Switzerland"
+    },
+    {
+      "bandwidth": "62.5",
+      "coding_rate": "5",
+      "description": "910.525MHz / SF7 / BW62.5 / CR5",
+      "frequency": "910.525",
+      "spreading_factor": "7",
+      "title": "USA"
+    },
+    {
+      "bandwidth": "62.5",
+      "coding_rate": "5",
+      "description": "927.875MHz / SF7 / BW62.5 / CR5 / 3B",
+      "frequency": "927.875",
+      "network_settings": {
+        "path_hash_size": 3
+      },
+      "spreading_factor": "7",
+      "title": "USA - Southern California"
+    },
+    {
+      "bandwidth": "62.5",
+      "coding_rate": "5",
+      "description": "920.250MHz / SF8 / BW62.5 / CR5",
+      "frequency": "920.250",
+      "spreading_factor": "8",
+      "title": "Vietnam (Narrow)"
+    },
+    {
+      "bandwidth": "250",
+      "coding_rate": "5",
+      "description": "920.250MHz / SF11 / BW250 / CR5",
+      "frequency": "920.250",
+      "spreading_factor": "11",
+      "title": "Vietnam (Deprecated)"
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{% load panel_formatting %}
+<dl class="description-list">
+  <dt>Name</dt>
+  <dd>
+    {{ node_information.name|default:"(no name)" }}
+  </dd>
+  <dt>Public key</dt>
+  <dd class="monospace-text">
+    {{ node_information.public_key }}
+  </dd>
+  <dt>Firmware</dt>
+  <dd>
+    {{ node_information.firmware_version }} · built {{ node_information.firmware_build }} · protocol {{ node_information.protocol_version }}
+  </dd>
+  <dt>Model</dt>
+  <dd>
+    {{ node_information.model }}
+  </dd>
+  <dt>Radio</dt>
+  <dd>
+    {{ node_information.radio_frequency_kilohertz|thousandths }} MHz · BW {{ node_information.radio_bandwidth_hertz|thousandths }} kHz · SF {{ node_information.radio_spreading_factor }} · CR {{ node_information.radio_coding_rate }}
+    {% if current_preset %}
+      <span class="badge badge-neutral ml-1">{{ current_preset.title }}</span>
+    {% endif %}
+  </dd>
+  <dt>Transmit power</dt>
+  <dd>
+    {{ node_information.transmit_power_dbm }} dBm of at most {{ node_information.maximum_transmit_power_dbm }} dBm
+  </dd>
+  <dt>Path hash size</dt>
+  <dd>
+    {{ node_information.path_hash_size }} byte{{ node_information.path_hash_size|pluralize }}
+  </dd>
+  <dt>Multi-acks</dt>
+  <dd>
+    {{ node_information.multi_acks }}
+  </dd>
+  <dt>Adding contacts</dt>
+  <dd>
+    {% if node_information.manual_add_contacts %}
+      Manual
+    {% else %}
+      Automatic
+    {% endif %}
+    · auto-add configuration 0x{{ node_information.auto_add_configuration|stringformat:"02x" }}
+  </dd>
+  <dt>Contacts</dt>
+  <dd>
+    {{ node_information.contact_count }} of {{ node_information.maximum_contacts }}
+  </dd>
+  <dt>Clock</dt>
+  <dd>
+    {{ node_information.clock_offset_seconds }} s from the server's clock
+  </dd>
+  <dt>Channel 0</dt>
+  <dd>
+    {{ node_information.channel_zero_name|default:"(unnamed)" }}
+    {% if node_information.channel_zero_is_public %}
+      <span class="badge badge-neutral ml-1">public key</span>
+    {% else %}
+      <span class="badge badge-neutral ml-1">private key</span>
+    {% endif %}
+  </dd>
+</dl>

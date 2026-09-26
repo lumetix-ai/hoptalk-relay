@@ -1,0 +1,61 @@
+# gunicorn listens on a Unix socket, so nginx is the only client it can ever have.
+upstream django {
+    server unix:/run/app/gunicorn.sock fail_timeout=0;
+}
+
+server {
+    listen 8080 default_server;
+    listen [::]:8080 default_server;
+    server_name _;
+
+    # $host carries no port, so the published HTTPS port is substituted at start-up.
+    return 301 https://$host${PUBLIC_HTTPS_SUFFIX}$request_uri;
+}
+
+server {
+    listen 8443 ssl default_server;
+    listen [::]:8443 ssl default_server;
+    http2 on;
+    server_name _;
+    charset utf-8;
+
+    ssl_certificate /etc/nginx/tls/fullchain.crt;
+    ssl_certificate_key /etc/nginx/tls/server.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:TLS:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    # No Strict-Transport-Security: browsers ignore it on an IP host, and a client that
+    # honoured it could never again accept this self-signed certificate.
+    include /etc/nginx/snippets/security-headers.conf;
+
+    # The production image collects the static files into /data/static with hashed names,
+    # so they are cached forever. The development image collects nothing: a missing file
+    # falls through to Django, which serves it from the source tree while DEBUG is on.
+    location /static/ {
+        root /data;
+        try_files $uri @django;
+
+        # A nested block with any add_header discards every header inherited from its
+        # parent, so the snippet has to be repeated here.
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        access_log off;
+    }
+
+    location / {
+        include /etc/nginx/snippets/django-proxy.conf;
+    }
+
+    location @django {
+        include /etc/nginx/snippets/django-proxy.conf;
+    }
+
+    location = /favicon.ico {
+        access_log off;
+        log_not_found off;
+        return 204;
+    }
+}

@@ -1,0 +1,14 @@
+{% load heroicons %}
+{% if contact.node_sync_state == "pending_add" %}
+  <span class="badge badge-warning">
+    {% heroicon_mini "arrow-path" class="size-3 animate-spin motion-reduce:animate-none" %}
+    being added
+  </span>
+{% elif contact.node_sync_state == "on_node" %}
+  <span class="badge badge-success">on the node</span>
+{% else %}
+  <span class="badge badge-danger">not added</span>
+  {% if contact.node_sync_error %}
+    <p class="mt-1 max-w-56 text-xs text-red-700 dark:text-red-300">{{ contact.node_sync_error }}</p>
+  {% endif %}
+{% endif %}
