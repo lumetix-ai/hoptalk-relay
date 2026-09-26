@@ -96,6 +96,9 @@ jobs:
                 with:
                     version: "0.12.19"
                     python-version: "3.14.7"
+                    # Every job of the matrix syncs the same lock file into the same cache key,
+                    # and all but the first to save it would warn that the key is taken.
+                    save-cache: ${{ matrix.actions.name == 'lock' }}
 
             -   name: Install the locked dependencies
                 run: |
