@@ -30,8 +30,8 @@ defaults will be tuned with.
 
 ## Equipment
 
-- **The relay node**: a Seeed XIAO nRF52840 with a Wio-SX1262, MeshCore USB serial companion firmware v1.17.1
-  (companion protocol 13), plugged into the server.
+- **The relay node**: a Seeed XIAO nRF52840 with a Wio-SX1262, MeshCore USB serial companion firmware v1.18.0
+  (companion protocol 14), plugged into the server.
 - **Tracker A and tracker B**: two Seeed Wio Tracker L1 Pro with MeshCore companion firmware, each connected over
   Bluetooth to a phone with the stock MeshCore app: **phone A** and **phone B**.
 - **A repeater** for checks 9 and 10: a MeshCore repeater that the relay node and the trackers can all reach, and a
@@ -93,7 +93,7 @@ Expected answers are written as the DM the phone receives, such as `HT1 a alice`
 ## 2. Setup and the identity change
 
 1. Open the panel; the start page opens the setup wizard. *Start setup*.
-2. Expected on the first step: the node's name, public key, firmware v1.17.1, model, protocol 13, radio, path hash size,
+2. Expected on the first step: the node's name, public key, firmware v1.18.0, model, protocol 14, radio, path hash size,
    multi-acks, automatic adding, contact count, clock and channel 0. **Write down the public key.**
 3. *Factory reset…*, type the node's name, *Factory reset*. Expected, live: the reset is sent, the node disappears
    within 15 seconds and comes back within 90 seconds, and the wizard shows a new public key.
@@ -111,8 +111,8 @@ Expected answers are written as the DM the phone receives, such as `HT1 a alice`
    - If *Back up the new identity* is skipped with *This node's firmware does not allow exporting its private key*,
      the firmware was built without `ENABLE_PRIVATE_KEY_EXPORT`. Record it: the first part of check 13 cannot pass
      with this firmware.
-6. Expected on the dashboard: mode *Running*; the chosen name, radio and transmit power; multi-acks 2; firmware v1.17.1
-   and protocol 13 with no *Unexpected firmware protocol version* banner; no drift; contacts on the node 0; a clock
+6. Expected on the dashboard: mode *Running*; the chosen name, radio and transmit power; multi-acks 2; firmware v1.18.0
+   and protocol 14 with no *Unexpected firmware protocol version* banner; no drift; contacts on the node 0; a clock
    offset of a few seconds at most (the node lost its clock in the reboot, and the worker set it); *Identity backup*
    *Stored*, taken a moment ago.
 7. Reload the page: the node is shown as configured, and the start page now opens the dashboard.

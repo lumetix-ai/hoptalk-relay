@@ -98,7 +98,7 @@ def test_every_page_keeps_to_the_content_security_policy(signed_in_client: Clien
 
 
 @pytest.mark.parametrize("path", PAGES)
-def test_every_page_polls_the_banner_region_and_loads_the_dialog_and_polling_scripts(
+def test_every_page_polls_the_banner_region_and_loads_the_dialog_polling_and_morph_scripts(
     signed_in_client: Client, path: str
 ) -> None:
     page = get_page(signed_in_client, path).content.decode()
@@ -107,6 +107,7 @@ def test_every_page_polls_the_banner_region_and_loads_the_dialog_and_polling_scr
     assert 'hx-trigger="load, every 5s"' in page
     assert "confirmation_dialogs.js" in page
     assert "polled_regions.js" in page
+    assert "idiomorph-ext.min.js" in page
 
 
 @pytest.mark.parametrize("path", PAGES)

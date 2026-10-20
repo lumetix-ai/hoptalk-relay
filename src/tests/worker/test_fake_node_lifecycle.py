@@ -1,4 +1,4 @@
-"""Reboot, factory reset and power loss behave as in firmware v1.17.1 on a board without an RTC."""
+"""Reboot, factory reset and power loss behave as in firmware v1.18.0 on a board without an RTC."""
 
 from typing import Any
 

@@ -1,4 +1,4 @@
-"""The node's key pair in the firmware's form, and its export and import, as companion firmware v1.17.1 has them."""
+"""The node's key pair in the firmware's form, and its export and import, as companion firmware v1.18.0 has them."""
 
 import random
 from typing import Any

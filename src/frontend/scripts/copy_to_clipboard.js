@@ -37,7 +37,11 @@
         }
         label.textContent = feedbackText;
         window.setTimeout(() => {
-            label.textContent = label.dataset.originalText;
+            // A poll that morphed the button meanwhile already put the server's label back and
+            // dropped the remembered one with the other attributes the server does not send.
+            if (label.dataset.originalText !== undefined) {
+                label.textContent = label.dataset.originalText;
+            }
         }, FEEDBACK_MILLISECONDS);
     }
 

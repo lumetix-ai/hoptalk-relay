@@ -23,7 +23,7 @@ from node.node_settings import (
 from node.setup_runs import was_configured_identity_restored_without_configuration
 
 WORKER_OFFLINE_AFTER_SECONDS = 20
-EXPECTED_FIRMWARE_PROTOCOL_VERSION = 13
+EXPECTED_FIRMWARE_PROTOCOL_VERSION = 14
 
 
 class BannerKind(StrEnum):

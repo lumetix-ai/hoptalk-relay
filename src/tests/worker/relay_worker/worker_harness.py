@@ -34,6 +34,7 @@ from node.node_settings import (
     NodeSettingKey,
     replace_node_configuration,
 )
+from node.worker_status import EXPECTED_FIRMWARE_PROTOCOL_VERSION
 from tests.manual_clock import ManualClock
 from tests.services.messaging.engine_builders import RelayHarness as EngineRelayHarness
 from tests.services.messaging.engine_builders import create_device as create_engine_device
@@ -41,7 +42,6 @@ from tests.worker.fake_node.fake_companion_firmware import FakeCompanionFirmware
 from tests.worker.fake_node.node_identity import contact_card_uri
 from tests.worker.fake_node.simulated_mesh import ReceivedDirectMessage, SimulatedDevice
 from tests.worker.fake_node.waiting import wait_until
-from worker.connection_supervisor import EXPECTED_FIRMWARE_PROTOCOL_VERSION
 from worker.relay_worker import RelayWorker
 from worker.worker_timing import WorkerTiming
 

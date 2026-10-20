@@ -1,4 +1,4 @@
-"""An in-process MeshCore companion node: firmware v1.17.1 as built for the XIAO nRF52840 over USB.
+"""An in-process MeshCore companion node: firmware v1.18.0 as built for the XIAO nRF52840 over USB.
 
 The same class plays the relay's node, driven by the real meshcore library through a
 `FakeNodeTransport`, and every simulated user device of a `SimulatedMesh`, driven by that device's
@@ -175,6 +175,8 @@ IMPORT_PRIVATE_KEY_MINIMUM_BYTES = 65
 MAXIMUM_CHANNEL_DATA_BYTES = MAXIMUM_FRAME_BYTES - 9
 SIGNAL_TO_NOISE_QUARTERS_RANGE = (-20, 48)
 RECEIVED_SIGNAL_STRENGTH_RANGE = (-120, -40)
+# Sent with the node's clock as the timestamp and never acknowledged; a flooded one gets no path return.
+COMMAND_LINE_TEXT_TYPES = frozenset({TextType.COMMAND_LINE_DATA, TextType.COMMAND_LINE_COMMAND})
 
 
 class NodeHostLink(Protocol):
@@ -1229,10 +1231,10 @@ class FakeCompanionFirmware:
         recipient = self._contacts.find_by_prefix(recipient_public_key_prefix)
         if recipient is None:
             return TextMessageRejected(error_code=FirmwareErrorCode.NOT_FOUND)
-        if text_type not in (TextType.PLAIN, TextType.COMMAND_LINE_DATA):
+        if text_type != TextType.PLAIN and text_type not in COMMAND_LINE_TEXT_TYPES:
             return TextMessageRejected(error_code=FirmwareErrorCode.UNSUPPORTED_COMMAND)
         message_text = text_before_first_nul(text)
-        if text_type == TextType.COMMAND_LINE_DATA:
+        if text_type in COMMAND_LINE_TEXT_TYPES:
             sender_timestamp = self._clock.current_time_unique()
         if not self._text_fits_one_packet(message_text, attempt) or self._packet_pool_is_full():
             return TextMessageRejected(error_code=FirmwareErrorCode.TABLE_FULL)
@@ -1467,10 +1469,10 @@ class FakeCompanionFirmware:
         if packet.text_type == TextType.PLAIN:
             self._accept_plain_text_message(sender, packet, arrival)
             return ReceptionOutcome.ACCEPTED
-        if packet.text_type == TextType.COMMAND_LINE_DATA:
+        if packet.text_type in COMMAND_LINE_TEXT_TYPES:
+            # The real node runs a command itself when the sender's contact has the remote CLI flag
+            # (0x10); the relay writes every contact without flags, so that branch is not modelled.
             self._queue_received_message(sender, packet, arrival)
-            if arrival.arrived_by_flood:
-                self._send_path_return(recipient=sender, arrival=arrival, acknowledgement=None)
             return ReceptionOutcome.ACCEPTED
         return ReceptionOutcome.UNSUPPORTED_TEXT_TYPE
 
@@ -1516,9 +1518,9 @@ class FakeCompanionFirmware:
         self._write_push(messages_waiting_push())
 
     def _send_path_return(
-        self, *, recipient: ContactRecord, arrival: PacketArrival, acknowledgement: AcknowledgementPayload | None
+        self, *, recipient: ContactRecord, arrival: PacketArrival, acknowledgement: AcknowledgementPayload
     ) -> None:
-        """Answer a flood with the path it took (and the ACK), flooded back to the sender."""
+        """Answer a flood with the path it took and the ACK, flooded back to the sender."""
         self._queue_transmission(
             PathReturnPacket(
                 sender_public_key=self.public_key,

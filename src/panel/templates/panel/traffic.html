@@ -36,7 +36,7 @@
   {% partialdef traffic_rows inline %}
     <div id="traffic-rows"
          class="card"
-         {% if is_live %}hx-get="{% url 'panel:traffic_rows' %}?{{ rows_query }}" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
+         {% if is_live %}hx-get="{% url 'panel:traffic_rows' %}?{{ rows_query }}" hx-trigger="every 3s" hx-ext="morph" hx-swap="morph:outerHTML"{% endif %}>
       {% if traffic_rows %}
         <ul class="divide-y divide-slate-100 dark:divide-slate-800">
           {% for traffic_row in traffic_rows %}

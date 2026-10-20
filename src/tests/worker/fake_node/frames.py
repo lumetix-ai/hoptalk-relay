@@ -1,4 +1,4 @@
-"""Byte layouts of the MeshCore companion protocol, as companion firmware v1.17.1 writes and reads them.
+"""Byte layouts of the MeshCore companion protocol, as companion firmware v1.18.0 writes and reads them.
 
 Every builder returns the frame payload without the serial header; `frame_node_to_host` and
 `HostToNodeDeframer` add and remove the `3E len16` and `3C len16` headers.
@@ -125,6 +125,7 @@ class TextType(IntEnum):
     PLAIN = 0
     COMMAND_LINE_DATA = 1
     SIGNED_PLAIN = 2
+    COMMAND_LINE_COMMAND = 3
 
 
 class NodeType(IntEnum):

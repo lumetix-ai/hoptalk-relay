@@ -63,7 +63,8 @@
         <div id="contact-list"
              hx-get="{% url 'panel:contact_list' %}"
              hx-trigger="contacts-changed from:body{% if has_pending_contacts %}, every 5s{% endif %}"
-             hx-swap="outerHTML">
+             hx-ext="morph"
+             hx-swap="morph:outerHTML">
           <p class="px-4 pt-3 text-xs text-slate-500 sm:px-5 dark:text-slate-400">
             {{ contact_count }} of {{ contact_capacity }} places used.
           </p>
@@ -232,7 +233,7 @@
               {% with pairing_session=pairing_area.pairing_session %}
                 <div id="pairing-panel"
                      class="space-y-4"
-                     {% if pairing_area.is_active %}hx-get="{% url 'panel:pairing_panel' pairing_session.pk %}" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+                     {% if pairing_area.is_active %}hx-get="{% url 'panel:pairing_panel' pairing_session.pk %}" hx-trigger="every 2s" hx-ext="morph" hx-swap="morph:outerHTML"{% endif %}>
                   {% if pairing_area.is_active %}
                     <div class="space-y-3 rounded-lg bg-sky-50 p-4 dark:bg-sky-950/40"
                          data-ends-at="{{ pairing_session.ends_at|date:'c' }}"

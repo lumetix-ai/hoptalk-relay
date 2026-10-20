@@ -37,6 +37,7 @@ from typing import Any
 from messaging.outbound_packets import mark_packets_awaiting_acknowledgement_dropped
 from node.models import WorkerStatus
 from node.node_settings import NodeConfiguration, NodeSettingKey, load_node_configuration, update_node_setting
+from node.worker_status import EXPECTED_FIRMWARE_PROTOCOL_VERSION
 from worker.acknowledgement_tracker import AcknowledgementTracker
 from worker.clock import Clock, wait_for_any_event_or_timeout, wait_for_any_event_until
 from worker.database_access import run_in_database_thread
@@ -62,7 +63,6 @@ logger = logging.getLogger(__name__)
 RelayMode = WorkerStatus.RelayMode
 ConnectionState = WorkerStatus.ConnectionState
 
-EXPECTED_FIRMWARE_PROTOCOL_VERSION = 13
 SHUTDOWN_REASON = "The relay worker is shutting down."
 
 
@@ -348,6 +348,7 @@ class ConnectionSupervisor:
         self._runtime_status.connected_since = self._clock.now()
         self._runtime_status.consecutive_connect_failures = 0
         self._runtime_status.node_clock_offset_seconds = handshake_outcome.clock_check.offset_seconds
+        self._runtime_status.node_clock_was_set_forward = handshake_outcome.clock_check.was_corrected
         self._runtime_status.settings_drift = [drift.to_json() for drift in handshake_outcome.settings_drift]
         self._runtime_status.connected_node = ConnectedNodeDescription(
             public_key=self_information.public_key,

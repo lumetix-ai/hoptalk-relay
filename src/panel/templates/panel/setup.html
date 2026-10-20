@@ -14,7 +14,7 @@
     {# Buttons in this polled region carry ids: htmx gives the focus back only to an element with an id. #}
     <div id="setup-step"
          class="space-y-6"
-         {% if situation.should_poll %}hx-get="{% url 'panel:setup_step' %}" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+         {% if situation.should_poll %}hx-get="{% url 'panel:setup_step' %}" hx-trigger="every 2s" hx-ext="morph" hx-swap="morph:outerHTML"{% endif %}>
       <ol class="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4"
           aria-label="Setup stages">
         {% for stage_label in setup_stages %}

@@ -198,8 +198,9 @@ class WorkerStatus(models.Model):
     node_model = models.CharField(max_length=64, blank=True, default="")
     node_protocol_version = models.IntegerField(null=True, blank=True, default=None)
     node_contact_count = models.IntegerField(null=True, blank=True, default=None)
-    # The node's clock minus the server's.
+    # The node's clock minus the server's, read at the last handshake before any correction.
     node_clock_offset_seconds = models.IntegerField(null=True, blank=True, default=None)
+    node_clock_was_set_forward = models.BooleanField(default=False)
     node_radio_summary = models.CharField(max_length=128, blank=True, default="")
     # [{"key", "expected", "actual", "corrected"}]
     settings_drift = models.JSONField(default=list, blank=True)

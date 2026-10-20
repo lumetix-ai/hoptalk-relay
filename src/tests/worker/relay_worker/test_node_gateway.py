@@ -273,7 +273,7 @@ async def test_settings_go_out_as_full_frames_the_firmware_reads_as_meant(
     assert (auto_add_configuration.configuration, auto_add_configuration.maximum_hops) == (0, 0)
 
 
-async def test_a_contact_is_added_with_a_full_record_and_no_route(
+async def test_a_contact_is_added_with_a_full_record_no_flags_and_no_route(
     fake_companion_firmware: FakeCompanionFirmware, meshcore_client: Any
 ) -> None:
     gateway, _reconnect_requests = build_gateway(meshcore_client)
@@ -289,6 +289,7 @@ async def test_a_contact_is_added_with_a_full_record_and_no_route(
 
     stored_record = fake_companion_firmware.find_contact(bytes.fromhex(record.public_key))
     assert stored_record is not None
+    assert stored_record.flags == 0
     assert not stored_record.has_known_route
     assert stored_record.name == truncate_contact_name(record.name).encode()
     assert len(stored_record.name) <= 31

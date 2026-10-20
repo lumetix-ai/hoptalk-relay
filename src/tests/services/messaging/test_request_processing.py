@@ -107,8 +107,18 @@ def test_a_frame_from_an_unknown_sender_is_dropped_and_asks_for_a_reconciliation
 
 
 @pytest.mark.django_db
-def test_a_text_type_other_than_plain_text_is_dropped(relay: RelayHarness, ivans_device: Contact) -> None:
-    processing_result = relay.receive(ivans_device, "HT1 Q ivan", text_type=1)
+@pytest.mark.parametrize(
+    "text_type",
+    [
+        pytest.param(1, id="command line data"),
+        pytest.param(2, id="signed plain text"),
+        pytest.param(3, id="command line command"),
+    ],
+)
+def test_a_text_type_other_than_plain_text_is_dropped(
+    relay: RelayHarness, ivans_device: Contact, text_type: int
+) -> None:
+    processing_result = relay.receive(ivans_device, "HT1 Q ivan", text_type=text_type)
 
     assert processing_result is not None
     assert processing_result.replies == ()

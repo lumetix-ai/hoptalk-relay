@@ -1,6 +1,6 @@
 """An in-process MeshCore companion node and a simulated mesh, for tests that run the real meshcore library.
 
-- `FakeCompanionFirmware` (fake_companion_firmware.py): companion firmware v1.17.1 as the XIAO
+- `FakeCompanionFirmware` (fake_companion_firmware.py): companion firmware v1.18.0 as the XIAO
   nRF52840 USB build behaves: command frames, replies and pushes byte for byte, the tables and
   their limits, reboot and factory reset, plus controls to drop or delay replies.
 - `FakeNodeTransport` and `FakeNodeConnector` (fake_node_transport.py): the connection MeshCore

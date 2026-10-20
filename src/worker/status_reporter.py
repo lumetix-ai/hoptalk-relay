@@ -91,6 +91,7 @@ def write_worker_status(runtime_status: WorkerRuntimeStatus, gauges: InMemoryGau
             node_protocol_version=connected_node.protocol_version if connected_node else None,
             node_contact_count=runtime_status.node_contact_count,
             node_clock_offset_seconds=runtime_status.node_clock_offset_seconds,
+            node_clock_was_set_forward=runtime_status.node_clock_was_set_forward,
             node_radio_summary=connected_node.radio_summary if connected_node else "",
             settings_drift=list(runtime_status.settings_drift),
             effective_configuration=dict(runtime_status.effective_configuration),

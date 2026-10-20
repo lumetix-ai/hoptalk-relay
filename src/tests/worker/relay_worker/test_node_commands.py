@@ -80,7 +80,7 @@ async def test_reading_the_node_information_reports_what_the_setup_wizard_shows(
     node_information = NodeInformation.from_json(finished_command.result)
     assert node_information.public_key == fake_companion_firmware.public_key.hex()
     assert node_information.contact_count == 1
-    assert node_information.protocol_version == 13
+    assert node_information.protocol_version == 14
     assert node_information.maximum_contacts == 350
     assert node_information.channel_zero_is_public
     assert node_information.channel_zero_name == "Public"

@@ -1,7 +1,8 @@
-"""Direct messages, firmware ACKs, routes and the offline queue behave as in firmware v1.17.1."""
+"""Direct messages, firmware ACKs, routes and the offline queue behave as in firmware v1.18.0."""
 
 from typing import Any
 
+import pytest
 from meshcore import EventType
 
 from tests.worker.fake_node.contact_records import ContactRecord
@@ -12,7 +13,7 @@ from tests.worker.fake_node.fake_companion_firmware import (
     TextMessageQueued,
 )
 from tests.worker.fake_node.firmware_state import FirmwareCapacities
-from tests.worker.fake_node.frames import FirmwareErrorCode, ResponseCode
+from tests.worker.fake_node.frames import FirmwareErrorCode, ResponseCode, TextType
 from tests.worker.fake_node.meshcore_events import (
     MeshCoreEventRecorder,
     is_error_with_code,
@@ -318,6 +319,32 @@ async def test_a_flood_exchange_teaches_both_nodes_a_route_and_reports_path_upda
     assert [(event.payload["text"], event.payload["path_len"]) for event in received_messages] == [
         ("by flood", 1),
         ("direct", 255),
+    ]
+
+
+@pytest.mark.parametrize("text_type", [TextType.COMMAND_LINE_DATA, TextType.COMMAND_LINE_COMMAND])
+async def test_a_flooded_command_line_text_reaches_the_app_without_an_acknowledgement_or_a_returned_path(
+    fake_companion_firmware: FakeCompanionFirmware,
+    meshcore_client: Any,
+    simulated_mesh: SimulatedMesh,
+    text_type: TextType,
+) -> None:
+    device = simulated_mesh.add_device("tracker", repeaters_to_relay=[b"\xa7\x00\x00"])
+
+    command_line_send = assert_queued(device.send_direct_message("get name", text_type=text_type))
+    await wait_for_queued_frames(fake_companion_firmware, 1)
+    await simulated_mesh.wait_until_idle()
+    received_messages = await drain_offline_queue(meshcore_client)
+
+    assert command_line_send.sent_by_flood
+    assert command_line_send.expected_acknowledgement == bytes(4)
+    assert [(event.payload["txt_type"], event.payload["text"]) for event in received_messages] == [
+        (text_type, "get name")
+    ]
+    assert not [
+        packet
+        for packet in fake_companion_firmware.transmitted_packets
+        if isinstance(packet, AcknowledgementPacket | PathReturnPacket)
     ]
 
 

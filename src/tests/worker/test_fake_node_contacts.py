@@ -1,4 +1,4 @@
-"""The contact table, contact listings, adverts and cards behave as in firmware v1.17.1."""
+"""The contact table, contact listings, adverts and cards behave as in firmware v1.18.0."""
 
 from typing import Any
 

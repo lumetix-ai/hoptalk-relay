@@ -16,7 +16,8 @@
          class="grid gap-6 lg:grid-cols-2"
          hx-get="{% url 'panel:node_status' %}"
          hx-trigger="every 3s"
-         hx-swap="outerHTML">
+         hx-ext="morph"
+         hx-swap="morph:outerHTML">
       {% with worker_status=dashboard.worker_status node_configuration=dashboard.node_configuration %}
         <section class="card" aria-labelledby="relay-card-title">
           <div class="card-header">
@@ -122,7 +123,8 @@
                 <dt>Clock offset</dt>
                 <dd>
                   {% if worker_status.node_clock_offset_seconds is not None %}
-                    {{ worker_status.node_clock_offset_seconds }} s from the server
+                    {{ worker_status.node_clock_offset_seconds }} s from the server at connect
+                    {% if worker_status.node_clock_was_set_forward %}· set forward{% endif %}
                   {% else %}
                     unknown
                   {% endif %}

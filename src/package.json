@@ -1,8 +1,13 @@
 {
   "private": true,
   "scripts": {
-    "build": "tailwindcss --input frontend/main.css --output build/static/app.css --minify",
+    "build": "npm run build:styles && npm run build:scripts",
+    "build:styles": "tailwindcss --input frontend/main.css --output build/static/app.css --minify",
+    "build:scripts": "mkdir -p build/static && cp node_modules/idiomorph/dist/idiomorph-ext.min.js build/static/",
     "watch": "tailwindcss --input frontend/main.css --output build/static/app.css --watch=always"
+  },
+  "dependencies": {
+    "idiomorph": "0.8.0"
   },
   "devDependencies": {
     "@tailwindcss/cli": "4.3.3",

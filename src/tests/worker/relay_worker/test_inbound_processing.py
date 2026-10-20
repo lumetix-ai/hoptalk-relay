@@ -14,7 +14,7 @@ from hoptalk_relay.relay_settings import get_relay_settings
 from messaging.inbound_log import find_unprocessed_inbox_row_ids
 from messaging.models import InboundDirectMessage
 from tests.worker.fake_node.fake_companion_firmware import FakeCompanionFirmware, TextMessageQueued
-from tests.worker.fake_node.frames import CommandCode
+from tests.worker.fake_node.frames import CommandCode, TextType
 from tests.worker.fake_node.simulated_mesh import SimulatedDevice, SimulatedMesh
 from tests.worker.fake_node.waiting import wait_until
 from tests.worker.relay_worker.worker_harness import (
@@ -270,6 +270,29 @@ async def test_only_requests_are_answered(
         assert inbox.texts == []
     else:
         await inbox.wait_for_text(expected_reply)
+
+
+async def test_a_command_line_command_is_recorded_as_an_unsupported_text_type_and_never_answered(
+    relay_worker: RelayWorkerHarness, fake_companion_firmware: FakeCompanionFirmware, simulated_mesh: SimulatedMesh
+) -> None:
+    device, _contact = await prepare_signed_in_device(fake_companion_firmware, simulated_mesh)
+    inbox = DeviceInbox(device)
+    relay_worker.start()
+    await relay_worker.wait_for_relay_mode(RelayMode.RUNNING)
+
+    device.send_direct_message("HT1 Q bob", text_type=TextType.COMMAND_LINE_COMMAND)
+    await wait_for_database(
+        lambda: [row.processing_state for row in read_inbox_rows()] == [InboundDirectMessage.ProcessingState.PROCESSED],
+        description="the row processed",
+    )
+
+    inbox_rows = await in_database(read_inbox_rows)
+    assert (inbox_rows[0].text_type, inbox_rows[0].classification) == (
+        TextType.COMMAND_LINE_COMMAND,
+        InboundDirectMessage.Classification.UNSUPPORTED_TEXT_TYPE,
+    )
+    await relay_worker.clock.sleep(0.3)
+    assert inbox.texts == []
 
 
 async def test_a_message_from_a_node_the_contacts_table_does_not_know_triggers_a_reconciliation(

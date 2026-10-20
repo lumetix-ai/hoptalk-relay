@@ -23,7 +23,7 @@ class NodeInformation:
     firmware_version: str
     firmware_build: str
     model: str
-    # The companion protocol version from the device query (13 for firmware v1.17.1).
+    # The companion protocol version from the device query (14 for firmware v1.18.0).
     protocol_version: int
     maximum_contacts: int
     radio_frequency_kilohertz: int

@@ -165,7 +165,7 @@ class FactoryResetReply(StrEnum):
 
 @dataclass(frozen=True, kw_only=True)
 class DeviceInformation:
-    # The companion protocol version (13 for firmware v1.17.1).
+    # The companion protocol version (14 for firmware v1.18.0).
     protocol_version: int
     firmware_version: str
     firmware_build: str

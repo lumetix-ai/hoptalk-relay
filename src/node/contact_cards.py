@@ -3,7 +3,7 @@
 The relay verifies the Ed25519 signature itself (pycryptodome) before a pasted card may become
 a contact, and checks that its own exported card carries the configured key.
 
-Card layout (firmware v1.17.1, little-endian): header (payload type in bits 2-5, version in
+Card layout (firmware v1.18.0, little-endian): header (payload type in bits 2-5, version in
 bits 6-7, route type in bits 0-1); four transport-code bytes for the two transport route types;
 path_len (hop count in bits 0-5, hash size minus one in bits 6-7) and the path; then the
 advert: public key (32), timestamp (4), signature (64) over key, timestamp and app data, and

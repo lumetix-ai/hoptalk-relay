@@ -1,6 +1,6 @@
 """The fake companion firmware's configuration and the tables it keeps, in flash or in RAM.
 
-The sizes and rules are those of the XIAO nRF52840 USB companion build of firmware v1.17.1:
+The sizes and rules are those of the XIAO nRF52840 USB companion build of firmware v1.18.0:
 350 contacts, 40 channels, a 256-frame offline queue, 8 expected ACKs, 16 packets and 160 packet hashes.
 """
 
@@ -36,10 +36,10 @@ ADVERT_BLOB_KEY_PREFIX_BYTES = 7
 class FirmwareBuild:
     """What the node reports about itself and the defaults a factory reset returns to."""
 
-    protocol_version_code: int = 13
-    build_date: str = "14 Aug 2026"
+    protocol_version_code: int = 14
+    build_date: str = "15 Oct 2026"
     manufacturer_name: str = "Seeed Xiao-nrf52"
-    firmware_version: str = "v1.17.1-d929643"
+    firmware_version: str = "v1.18.0-81dbae5"
     maximum_transmit_power_dbm: int = 22
     default_frequency_megahertz: float = 869.618
     default_bandwidth_kilohertz: float = 62.5

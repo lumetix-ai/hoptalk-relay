@@ -249,12 +249,18 @@ class SimulatedDevice:
             raise DeviceUnreachableError(f"The app of {self.name} cannot reach its node")
 
     def send_direct_message(
-        self, text: str | bytes, *, sender_timestamp: int | None = None, attempt: int = 0
+        self,
+        text: str | bytes,
+        *,
+        sender_timestamp: int | None = None,
+        attempt: int = 0,
+        text_type: TextType = TextType.PLAIN,
     ) -> SendTextMessageResult:
         """Hand a DM to the relay to the device's node, which answers as to CMD_SEND_TXT_MSG.
 
         Without a timestamp the next one is max(now, previous + 1); give the previous timestamp
         and a higher attempt to make the node's own firmware-level repeat, as the stock app does.
+        The node replaces the timestamp of a command line text type with its own clock.
         """
         self._require_app_can_reach_node()
         if sender_timestamp is None:
@@ -262,7 +268,7 @@ class SimulatedDevice:
         self._last_sender_timestamp = max(self._last_sender_timestamp, sender_timestamp)
         text_bytes = text.encode() if isinstance(text, str) else text
         return self.firmware.send_text_message(
-            text_type=TextType.PLAIN,
+            text_type=text_type,
             attempt=attempt,
             sender_timestamp=sender_timestamp,
             recipient_public_key_prefix=self.relay_public_key[:PUBLIC_KEY_PREFIX_BYTES],

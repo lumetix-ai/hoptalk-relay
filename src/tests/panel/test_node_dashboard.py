@@ -41,22 +41,21 @@ RELAY_ACTION_BUTTON_LABELS = (
 
 
 def report_running_worker(**other_fields: object) -> None:
-    upsert_worker_status(
-        WorkerStatus(
-            heartbeat_at=timezone.now(),
-            relay_mode=WorkerStatus.RelayMode.RUNNING,
-            connection_state=WorkerStatus.ConnectionState.CONNECTED,
-            connected_since=timezone.now(),
-            transport_description="tcp host.docker.internal:5055",
-            node_public_key=RESET_NODE_PUBLIC_KEY,
-            node_contact_count=2,
-            node_clock_offset_seconds=3,
-            node_radio_summary="916.575 MHz / SF7 / BW62.5 / CR7",
-            packets_awaiting_node_acknowledgement=3,
-            replies_queued=1,
-            **other_fields,
-        )
-    )
+    worker_status_fields: dict[str, object] = {
+        "heartbeat_at": timezone.now(),
+        "relay_mode": WorkerStatus.RelayMode.RUNNING,
+        "connection_state": WorkerStatus.ConnectionState.CONNECTED,
+        "connected_since": timezone.now(),
+        "transport_description": "tcp host.docker.internal:5055",
+        "node_public_key": RESET_NODE_PUBLIC_KEY,
+        "node_contact_count": 2,
+        "node_clock_offset_seconds": 3,
+        "node_radio_summary": "916.575 MHz / SF7 / BW62.5 / CR7",
+        "packets_awaiting_node_acknowledgement": 3,
+        "replies_queued": 1,
+        **other_fields,
+    }
+    upsert_worker_status(WorkerStatus(**worker_status_fields))
 
 
 def test_the_dashboard_explains_an_offline_worker_and_a_node_that_is_not_set_up(signed_in_client: Client) -> None:
@@ -84,9 +83,19 @@ def test_the_dashboard_shows_the_relay_the_node_and_the_traffic(signed_in_client
     assert "916.575 MHz / SF7 / BW62.5 / CR7" in page
     assert "2 on the node · 2 in the database · capacity 350" in page
     assert "1 not on the node" in page
-    assert "3 s from the server" in page
+    assert "3 s from the server at connect" in page
+    assert "set forward" not in page
     assert "Retry maximum attempts" in page
     assert "as the worker runs it" in page
+
+
+def test_the_dashboard_says_when_the_worker_set_a_clock_that_was_behind_forward(signed_in_client: Client) -> None:
+    replace_node_configuration(build_node_configuration())
+    report_running_worker(node_clock_offset_seconds=-4581, node_clock_was_set_forward=True)
+
+    page = get_page(signed_in_client, "/node").content.decode()
+
+    assert re.search(r"-4581 s from the server at connect\s+· set forward", page)
 
 
 def test_settings_drift_is_listed_with_the_reapply_button(signed_in_client: Client) -> None:

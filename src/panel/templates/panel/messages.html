@@ -30,7 +30,7 @@
   {% partialdef message_table inline %}
     <div id="messages-table"
          class="card"
-         {% if is_live %}hx-get="{% url 'panel:message_table' %}?{{ table_query }}" hx-trigger="every 5s" hx-swap="outerHTML"{% endif %}>
+         {% if is_live %}hx-get="{% url 'panel:message_table' %}?{{ table_query }}" hx-trigger="every 5s" hx-ext="morph" hx-swap="morph:outerHTML"{% endif %}>
       {% if message_rows %}
         <ul class="divide-y divide-slate-100 dark:divide-slate-800">
           {% for message_row in message_rows %}

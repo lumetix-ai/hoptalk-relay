@@ -54,7 +54,9 @@ async def test_a_configured_node_is_relayed_and_the_heartbeat_describes_it(
     assert worker_status is not None
     assert worker_status.connection_state == WorkerStatus.ConnectionState.CONNECTED
     assert worker_status.node_public_key == fake_companion_firmware.public_key.hex()
-    assert worker_status.node_protocol_version == 13
+    assert worker_status.node_protocol_version == 14
+    # The fake node boots with its clock in 2024, so the handshake set it forward.
+    assert worker_status.node_clock_was_set_forward
     assert worker_status.connection_generation == 1
     assert worker_status.worker_instance_id == relay_worker.worker.worker_instance_id
     assert worker_status.effective_configuration["attempts_per_delivery"] == 3

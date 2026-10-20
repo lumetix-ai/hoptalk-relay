@@ -16,6 +16,7 @@ from node.contact_cards import truncate_contact_name
 ADD_UPDATE_CONTACT_COMMAND_CODE = 0x09
 PUBLIC_KEY_BYTES = 32
 CHAT_NODE_TYPE = 1
+# Since firmware v1.18.0, flag 0x10 lets a contact run CLI commands on the node over the mesh.
 NO_FLAGS = 0
 NO_KNOWN_ROUTE = 0xFF
 OUT_PATH_FIELD_BYTES = 64

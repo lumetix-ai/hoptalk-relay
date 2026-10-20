@@ -1,9 +1,12 @@
 // The regions of the admin panel that htmx polls every few seconds.
 //
-// A poll replaces its whole region, which closes whatever the operator opened inside it. So a
-// region is not polled while a dialog is open in it, or a row is expanded in it (a <details>);
-// the next poll after it closes catches up. A refresh that a change triggered, rather than the
-// timer, still replaces a region with an expanded row, because nothing would repeat it later.
+// A poll morphs its region into the server's answer (hx-swap="morph:outerHTML", idiomorph): only
+// the nodes that changed are touched, so text the operator selected survives unless that text
+// itself changed. The morph also copies the answer's attributes, which have no "open", so it
+// closes whatever the operator opened inside the region. So a region is not polled while a
+// dialog is open in it, or a row is expanded in it (a <details>); the next poll after it closes
+// catches up. A refresh that a change triggered, rather than the timer, still redraws a region
+// with an expanded row, because nothing would repeat it later.
 //
 // The banners are polled as well, and they are announced by screen readers whenever they are
 // inserted. Their region is therefore swapped only when the server's answer changed, so that a

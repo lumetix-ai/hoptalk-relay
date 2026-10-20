@@ -1,5 +1,5 @@
 {% load heroicons %}
-<div id="command-progress-{{ node_command.pk }}" class="space-y-3 rounded-lg border border-slate-200 p-4 dark:border-slate-800" {% if node_command.state == "pending" or node_command.state == "running" %}hx-get="{% url 'panel:command_progress' node_command.pk %}{% if refresh_page_when_finished %}?refresh_page_when_finished=1{% endif %}" hx-trigger="every 1s" hx-swap="outerHTML"{% endif %}>
+<div id="command-progress-{{ node_command.pk }}" class="space-y-3 rounded-lg border border-slate-200 p-4 dark:border-slate-800" {% if node_command.state == "pending" or node_command.state == "running" %}hx-get="{% url 'panel:command_progress' node_command.pk %}{% if refresh_page_when_finished %}?refresh_page_when_finished=1{% endif %}" hx-trigger="every 1s" hx-ext="morph" hx-swap="morph:outerHTML"{% endif %}>
   <div class="flex flex-wrap items-center justify-between gap-2">
     <p class="text-sm font-medium">{{ node_command.get_kind_display }}</p>
     {% include "panel/includes/state_badge.html" with state=node_command.state %}

@@ -1,4 +1,4 @@
-"""Session, clock and settings commands are answered and validated the way firmware v1.17.1 does."""
+"""Session, clock and settings commands are answered and validated the way firmware v1.18.0 does."""
 
 from typing import Any
 
@@ -23,13 +23,13 @@ async def test_device_info_describes_the_xiao_usb_build(meshcore_client: Any) ->
     device_information = await meshcore_client.commands.send_device_query()
 
     assert device_information.payload == {
-        "fw ver": 13,
+        "fw ver": 14,
         "max_contacts": 350,
         "max_channels": 40,
         "ble_pin": 0,
-        "fw_build": "14 Aug 2026",
+        "fw_build": "15 Oct 2026",
         "model": "Seeed Xiao-nrf52",
-        "ver": "v1.17.1-d929643",
+        "ver": "v1.18.0-81dbae5",
         "repeat": False,
         "path_hash_mode": 0,
     }

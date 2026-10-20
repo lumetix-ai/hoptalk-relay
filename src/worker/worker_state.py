@@ -75,6 +75,7 @@ class WorkerRuntimeStatus:
     connected_node: ConnectedNodeDescription | None = None
     node_contact_count: int | None = None
     node_clock_offset_seconds: int | None = None
+    node_clock_was_set_forward: bool = False
     settings_drift: list[dict[str, Any]] = field(default_factory=list)
     node_identity_backup_state: WorkerStatus.NodeIdentityBackupState = NodeIdentityBackupState.NOT_CHECKED
     consecutive_connect_failures: int = 0

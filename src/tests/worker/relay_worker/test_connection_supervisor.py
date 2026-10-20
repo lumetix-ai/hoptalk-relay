@@ -103,6 +103,7 @@ async def test_the_handshake_queries_the_device_first_and_sets_a_clock_that_is_b
     ]
     assert fake_companion_firmware.app_target_version == 3
     assert abs(fake_companion_firmware.clock_time() - int(relay_worker.clock.now().timestamp())) <= 2
+    assert relay_worker.runtime_status.node_clock_was_set_forward
 
 
 async def test_a_node_clock_in_step_or_ahead_is_left_alone(
@@ -115,6 +116,7 @@ async def test_a_node_clock_in_step_or_ahead_is_left_alone(
 
     assert CommandCode.SET_DEVICE_TIME not in commands_after_the_app_start(fake_companion_firmware)
     assert relay_worker.runtime_status.node_clock_offset_seconds >= 115
+    assert not relay_worker.runtime_status.node_clock_was_set_forward
 
 
 async def test_the_configured_node_runs_and_is_drained_reconciled_and_sent_to(

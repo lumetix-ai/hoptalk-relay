@@ -12,6 +12,8 @@
     <link rel="icon" href="data:,">
     <link rel="stylesheet" href="{% static 'app.css' %}">
     {% htmx_script %}
+    {# The morph extension is enabled on each polled region rather than on <body>: it claims every swap style as inline, which would break the hx-swap-oob="innerHTML" swaps. #}
+    <script src="{% static 'idiomorph-ext.min.js' %}" defer></script>
     <script src="{% static 'confirmation_dialogs.js' %}" defer></script>
     <script src="{% static 'copy_to_clipboard.js' %}" defer></script>
     <script src="{% static 'pairing_countdown.js' %}" defer></script>

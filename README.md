@@ -83,7 +83,7 @@ Compose files are merged.
 | --- | --- | --- |
 | Application code | Baked into the image | Bind-mounted from `src/` into `app` and `relay` |
 | Python dependencies | Installed during the build, without the development group | Installed during the build, with the development group: the checks and tests run in this image |
-| Stylesheet | Built during the build, collected with hashed names | Built by you into `src/build/static` |
+| Stylesheet and the idiomorph script | Built during the build, collected with hashed names | Built by you into `src/build/static` |
 | Database | `var/database/` on the host | A named Docker volume |
 | Django debug mode | Off | On: templates are read afresh on every request, and gunicorn restarts its workers when a Python file changes |
 | Extra services | None | `node`, the Tailwind watcher, behind the `development` profile |
@@ -126,8 +126,8 @@ value is missing or out of range, naming the variable. A change to either file t
 
 - On the development Mac, socat for the serial bridge: `brew install socat`. `make setup` also needs curl, which macOS
   has.
-- The relay node: a Seeed XIAO nRF52840 with a Wio-SX1262, running the MeshCore USB serial companion firmware v1.17.1
-  (companion protocol 13). Other companion nodes may work; the dashboard warns when the protocol version differs.
+- The relay node: a Seeed XIAO nRF52840 with a Wio-SX1262, running the MeshCore USB serial companion firmware v1.18.0
+  (companion protocol 14). Other companion nodes may work; the dashboard warns when the protocol version differs.
 
 Every target lives in `src/Makefile` and is called from the repository root as `make --directory=src <target>`, with
 arguments in `command="..."`. The targets are thin wrappers around `scripts/docker-compose.sh`; on a machine without
@@ -493,6 +493,9 @@ panel shows that the node is not connected. That is expected, and everything exc
   ```
 
   Reload the page to see the result.
+- **idiomorph**, the htmx extension that morphs the polled regions' updates in, is copied from `node_modules` into
+  `src/build/static` by the same `run build`. Run `make --directory=src npm command="ci"` and then `run build` again
+  after its version in `src/package.json` changes.
 - **The panel's scripts** in `src/frontend/scripts/` are served as they are written; reload the page.
 - **Migrations**: `make --directory=src manage command="makemigrations"`. The `app` container applies pending
   migrations on every start, and `make --directory=src manage command="migrate"` applies them at once.
